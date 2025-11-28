@@ -4,7 +4,7 @@ import struct
 import time
 import numpy as np
 
-PORT = "/dev/tty.usbmodem1101"  # adjust if different
+PORT = "COM5"  # adjust if different
 BAUD = 115200
 SAMPLE_RATE = 8000
 RECORD_SECONDS = 10
