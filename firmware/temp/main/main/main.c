@@ -18,7 +18,7 @@ void app_main(void)
 
     /* Set up all relevant tasks */
     xTaskCreate(audio_sampling_task, "audio_sampling_task", 8192, NULL, 1, NULL);
-    xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, NULL, 5, NULL);
-    xTaskCreate(dsp_ml_processing_task, "dsp_ml_processing_task", 8192, NULL, 5, NULL);
-    xTaskCreate(lcd_ui_task, "lcd_ui_task", 8192, NULL, 5, NULL);
+    // xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, NULL, 5, NULL);
+    // xTaskCreate(dsp_ml_processing_task, "dsp_ml_processing_task", 8192, NULL, 5, NULL);
+    // xTaskCreate(lcd_ui_task, "lcd_ui_task", 8192, NULL, 5, NULL);
 }
