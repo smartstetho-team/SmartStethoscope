@@ -1,7 +1,12 @@
+#include "cmn.h"
 #include "mic_setup.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
+#include <cstring>
+
+static const char *AUDIO_TASK_TAG = "AUDIO_TASK";
 
 void init_mic_adc(adc_continuous_handle_t *handle)
 {
@@ -11,7 +16,7 @@ void init_mic_adc(adc_continuous_handle_t *handle)
         .conv_frame_size = READ_LEN,
     };
 
-    adc_continuous_new_handle(&adc_config, handle);
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, handle));
 
     // Configure ADC channel
     adc_continuous_config_t cont_config = {
@@ -29,48 +34,45 @@ void init_mic_adc(adc_continuous_handle_t *handle)
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
 
-    adc_continuous_config(*handle, &cont_config);
+    ESP_ERROR_CHECK(adc_continuous_config(*handle, &cont_config));
 }
 
 void audio_sampling_task(void *audio_parameters)
 {
-    printf("READY FOR AUDIO SAMPLING\n");
+    global_params* params = (global_params*)audio_parameters;
+    adc_continuous_handle_t handle = params->mic_adc_handle;
+    uint8_t * master_audio_buffer = params->master_audio_buffer;
+    EventGroupHandle_t event_group_handle = params->event_group_handle;
 
-    adc_continuous_handle_t handle = (adc_continuous_handle_t)audio_parameters;
-
-    uint8_t result[READ_LEN];
-    uint32_t ret_num = 0;
+    uint8_t read_buffer[READ_LEN];
+    uint32_t bytes_read = 0;
 
     while (1)
     {
+        ESP_LOGI(AUDIO_TASK_TAG, "Ready for audio sampling.\n");
+        
+        // Block audio sampling task until button pressed via hardware interrupt
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        printf("Button pressed! Starting sampling now..\n");
+        xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_START_BIT);
+
+        ESP_LOGI(AUDIO_TASK_TAG, "Button pressed! Starting sampling now..\n");
 
         // Start the DMA conversion
-        adc_continuous_start(handle);
+        ESP_ERROR_CHECK(adc_continuous_start(handle));
         
-        uint32_t total_bytes_collected = 0;
-        uint32_t bytes_needed = 8000 * 10 * 4; // 10 seconds of 32-bit data
+        uint32_t total_bytes_read = 0;
+        uint32_t bytes_needed = MASTER_AUDIO_BUFFER_SIZE; // 10 seconds of 32-bit data
 
-        while (total_bytes_collected < bytes_needed) 
+        while (total_bytes_read < bytes_needed) 
         {
             // Read from the DMA buffer
-            esp_err_t err = adc_continuous_read(handle, result, READ_LEN, &ret_num, 100);
+            esp_err_t err = adc_continuous_read(handle, read_buffer, READ_LEN, &bytes_read, 100);
         
             if (err == ESP_OK) 
             {
-                // Continuous mode Type 2 format provides 4 bytes per sample
-                for (int i = 0; i < ret_num; i += 4)
-                {
-                    // Unpack the 12-bit value from the Type 2 structure
-                    adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-                    uint32_t val = p->type2.data;
-
-                    printf("%ld\n", val); 
-                }
-
-                total_bytes_collected += ret_num;
+                memcpy(master_audio_buffer+total_bytes_read, read_buffer, bytes_read);
+                total_bytes_read += bytes_read;
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
             else if (err == ESP_ERR_TIMEOUT) 
@@ -81,7 +83,29 @@ void audio_sampling_task(void *audio_parameters)
         }
 
         // Stop conversion to save power
-        adc_continuous_stop(handle);
+        ESP_ERROR_CHECK(adc_continuous_stop(handle));
+
+        // Output ADC value every 100th sample (USE FOR DEBUGGING)
+        for (int i = 0; i < total_bytes_read; i += 100*ADC_OUTPUT_LEN)
+        {
+            adc_digi_output_data_t *sample = (adc_digi_output_data_t*)&master_audio_buffer[i];
+            ESP_LOGI(AUDIO_TASK_TAG, "%ld\n", sample->type2.data);
+            vTaskDelay(pdMS_TO_TICKS(1)); 
+        }
+
+        ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.\n");
+
+        xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_START_BIT);
+        xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 
+                           BLE_STREAMING_START_BIT | ML_CLASSIFICATION_START_BIT);
+
+        // Wait for BLE streaming and DSP+ML classification to be done before listening to user again
+        xEventGroupWaitBits(event_group_handle, 
+                            BLE_STREAMING_END_BIT | ML_CLASSIFICATION_END_BIT,  
+                            pdTRUE, pdTRUE, portMAX_DELAY);
+
+        xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 
+                           BLE_STREAMING_START_BIT | ML_CLASSIFICATION_START_BIT);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

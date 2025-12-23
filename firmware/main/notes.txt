@@ -1,0 +1,11 @@
+
+Audio Sampling Task:
+// TODO: This design may change?
+// Should we allow users to record new sounds if lets say we finish BLE streaming before
+// ML classification? In this case, recorded sounds will be in a queue (complex).
+
+Both BLE and ML classification task will have a ptr to the master audio buffer containing
+all the bytes from the recording. 
+As long as YOU DO NOT modify the buffer at that address, you should be able to read the data
+from both tasks. It is immutable atm. If you need to modify it, use mutexes for thread safety
+or use a seperate buffer.
