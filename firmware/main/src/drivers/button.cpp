@@ -1,14 +1,17 @@
-#include "cmn.h"
 #include "drivers/button.h"
-#include "esp_timer.h"
 
+#include "cmn.h"
 #include <driver/gpio.h>
+#include "esp_timer.h"
+#include "esp_log.h"
 
 #define PUSH_BUTTON_PIN GPIO_NUM_4
 #define DEBOUNCE_TIME_MS 20
 
 static TaskHandle_t target_task = NULL;
 static gpio_config_t io_conf;
+
+static const char *BUTTON_DRIVER_TAG = "BUTTON_DRIVER";
 
 static void IRAM_ATTR push_button_isr(void *args)
 {
@@ -56,7 +59,7 @@ void setup_push_button(TaskHandle_t task, void *args)
         .intr_type = GPIO_INTR_NEGEDGE,         // Interrupt called on falling edge due to pull-up config
     };
 
-    gpio_config(&io_conf);
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(PUSH_BUTTON_PIN, push_button_isr, (void*)args);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_install_isr_service(0));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(PUSH_BUTTON_PIN, push_button_isr, (void*)args));
 }

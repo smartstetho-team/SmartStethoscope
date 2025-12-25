@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <cstring>
 
 static const char *AUDIO_TASK_TAG = "AUDIO_TASK";
@@ -58,6 +59,8 @@ void audio_sampling_task(void *audio_parameters)
 
         ESP_LOGI(AUDIO_TASK_TAG, "Button pressed! Starting sampling now..\n");
 
+        int64_t sampling_start = esp_timer_get_time();
+
         // Start the DMA conversion
         ESP_ERROR_CHECK(adc_continuous_start(handle));
         
@@ -73,17 +76,20 @@ void audio_sampling_task(void *audio_parameters)
             {
                 memcpy(master_audio_buffer+total_bytes_read, read_buffer, bytes_read);
                 total_bytes_read += bytes_read;
-                vTaskDelay(pdMS_TO_TICKS(1));
             }
             else if (err == ESP_ERR_TIMEOUT) 
             {
-                // No data ready yet, give other tasks time to run
-                vTaskDelay(pdMS_TO_TICKS(1)); 
+                ESP_LOGW(AUDIO_TASK_TAG, "ADC read from DMA buffer timed out, retrying...");
             }
         }
 
-        // Stop conversion to save power
+        // Stop conversion
         ESP_ERROR_CHECK(adc_continuous_stop(handle));
+
+        int64_t sampling_end = esp_timer_get_time();
+
+        ESP_LOGI(AUDIO_TASK_TAG, "Sampling Time (ms): %d\n", (sampling_end-sampling_start)/1000.0f);
+        ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.\n");
 
         // Output ADC value every 100th sample (USE FOR DEBUGGING)
         for (int i = 0; i < total_bytes_read; i += 100*ADC_OUTPUT_LEN)
@@ -92,8 +98,6 @@ void audio_sampling_task(void *audio_parameters)
             ESP_LOGI(AUDIO_TASK_TAG, "%ld\n", sample->type2.data);
             vTaskDelay(pdMS_TO_TICKS(1)); 
         }
-
-        ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.\n");
 
         xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_START_BIT);
         xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 
