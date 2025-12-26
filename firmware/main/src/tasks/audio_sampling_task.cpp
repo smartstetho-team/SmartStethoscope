@@ -40,6 +40,8 @@ void configure_mic_adc(adc_continuous_handle_t *handle)
 
 void audio_sampling_task(void *audio_parameters)
 {
+    ESP_LOGI(AUDIO_TASK_TAG, "Starting audio sampling task");
+
     global_params* params = (global_params*)audio_parameters;
     adc_continuous_handle_t handle = params->mic_adc_handle;
     uint8_t * master_audio_buffer = params->master_audio_buffer;
@@ -47,11 +49,9 @@ void audio_sampling_task(void *audio_parameters)
 
     uint8_t read_buffer[READ_LEN];
     uint32_t bytes_read = 0;
-
+        
     while (1)
     {
-        ESP_LOGI(AUDIO_TASK_TAG, "Starting audio sampling task");
-        
         // Block audio sampling task until button pressed via hardware interrupt
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
@@ -96,11 +96,12 @@ void audio_sampling_task(void *audio_parameters)
         {
             adc_digi_output_data_t *sample = (adc_digi_output_data_t*)&master_audio_buffer[i];
             ESP_LOGI(AUDIO_TASK_TAG, "%ld", sample->type2.data);
-            vTaskDelay(pdMS_TO_TICKS(1)); 
+            vTaskDelay(pdMS_TO_TICKS(1)); // yield CPU so we actually give it time to print the data properly
         }
 
         xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_START_BIT);
-        xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT);
+        xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 
+                           BLE_STREAMING_START_BIT | ML_CLASSIFICATION_START_BIT);
 
         // Wait for BLE streaming and DSP+ML classification to be done before listening to user again
         xEventGroupWaitBits(event_group_handle, 

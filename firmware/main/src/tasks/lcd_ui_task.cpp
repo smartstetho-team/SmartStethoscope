@@ -31,7 +31,7 @@ void bootup_screen_init(void * lcd_params)
 void lcd_ui_task(void *lcd_ui_parameters)
 {
     ESP_LOGI(LCD_UI_TASK_TAG, "Starting LCD UI task");
-
+    
     LCD_Display_Params* lcd_params = (LCD_Display_Params*)lcd_ui_parameters;
     uint32_t time_till_next_ms = 0;
 

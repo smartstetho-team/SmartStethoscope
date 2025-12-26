@@ -1,4 +1,6 @@
 
+Design related notes:
+
 Audio Sampling Task:
 // TODO: This design may change?
 // Should we allow users to record new sounds if lets say we finish BLE streaming before
@@ -9,3 +11,12 @@ all the bytes from the recording.
 As long as YOU DO NOT modify the buffer at that address, you should be able to read the data
 from both tasks. It is immutable atm. If you need to modify it, use mutexes for thread safety
 or use a seperate buffer.
+
+Code comments:
+
+- Use ESP_LOGI for printing.
+- If UART driver/hardware is slow compared to the cpu, then there is a chance that
+  the print wont come out properly. So you can make the CPU wait until the UART driver
+  is done pushing out all the characters on the Tx pin before proceeding. This is equivalent
+  to fflush after printf.
+  - Force flush after ESP_LOGI --> uart_wait_tx_done(UART_NUM_0, portMAX_DELAY);

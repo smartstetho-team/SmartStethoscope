@@ -78,16 +78,16 @@ extern "C" void app_main(void)
 
     // Create all tasks
     xTaskCreate(audio_sampling_task, "audio_sampling_task", 8192, 
-                (void*)&parameters, 10, &audio_sampling_task_handle);
+                (void*)&parameters, 7, &audio_sampling_task_handle);
 
     xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, 
-                (void*)&parameters, 5, &ble_streaming_task_handle);
+                (void*)&parameters, 4, &ble_streaming_task_handle);
 
     xTaskCreate(ml_classification_task, "ml_classification_task", 8192, 
-                (void*)&parameters, 5, &ml_classification_task_handle);
+                (void*)&parameters, 4, &ml_classification_task_handle);
 
     xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 
-                (void*)&lcd_params, 3, &lcd_ui_task_handle);
+                (void*)&lcd_params, 2, &lcd_ui_task_handle);
 
     // Set up button for the audio task
     configure_push_button(audio_sampling_task_handle, (void*)&parameters);
