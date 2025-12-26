@@ -1,3 +1,5 @@
+#ifndef MIC_SETUP_H
+#define MIC_SETUP_H
 
 #include "esp_adc/adc_continuous.h"
 
@@ -16,3 +18,5 @@
 
 void configure_mic_adc(adc_continuous_handle_t *handle);
 void audio_sampling_task(void *audio_parameters);
+
+#endif /* MIC_SETUP_H */

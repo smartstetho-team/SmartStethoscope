@@ -1,3 +1,6 @@
+#ifndef CMN_H
+#define CMN_H
+
 #include "esp_adc/adc_continuous.h"
 #include "freertos/FreeRTOS.h"
 
@@ -18,3 +21,5 @@ typedef struct
     adc_continuous_handle_t mic_adc_handle;
     EventGroupHandle_t event_group_handle;
 } global_params;
+
+#endif /* CMN_H */

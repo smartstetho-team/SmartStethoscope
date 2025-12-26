@@ -1,3 +1,5 @@
+#ifndef LCD_DISPLAY_H
+#define LCD_DISPLAY_H
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -37,3 +39,5 @@ typedef struct
 
 void configure_lcd_display(LCD_Display_Params * lcd_params);
 void configure_lcd_lvgl(LCD_Display_Params * lcd_params);
+
+#endif /* LCD_DISPLAY_H */

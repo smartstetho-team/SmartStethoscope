@@ -1,4 +1,6 @@
 
+#ifndef BLE_SETUP_H
+#define BLE_SETUP_H
 
 /* BLE Configuration */
 #include <cstdint>
@@ -11,3 +13,5 @@ typedef struct
 } ble_packet;
 
 void ble_streaming_task(void *ble_parameters);
+
+#endif /* BLE_SETUP_H */
