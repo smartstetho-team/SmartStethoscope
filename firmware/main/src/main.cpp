@@ -16,7 +16,7 @@
 #include "lvgl.h"
 
 // Global variables
-global_params parameters; // contains the ptr to the master audio buffer
+global_params parameters;
 
 // Common parameters
 adc_continuous_handle_t mic_adc_handle = NULL;
