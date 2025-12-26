@@ -1,10 +1,9 @@
 
 
 /* BLE Configuration */
+#include <cstdint>
 
 #define SEND_LEN 512
-
-// TODO: PUT CODE HERE
 
 typedef struct 
 {

@@ -1,10 +1,9 @@
-#include "cmn.h"
 #include "dsp_ml_setup.h"
 
+#include "cmn.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include <cstring>
 
 static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 
@@ -17,14 +16,14 @@ void ml_classification_task(void *dsp_ml_parameters)
 
     while (1)
     {
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Ready for ML classification.\n");
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Ready for ML classification.");
 
         xEventGroupWaitBits(event_group_handle,
-                            AUDIO_RECORDING_DONE_BIT | ML_CLASSIFICATION_START_BIT, 
+                            AUDIO_RECORDING_DONE_BIT, 
                             pdFALSE, pdTRUE, portMAX_DELAY);
 
         // TODO: Do filtering here, remove noise, etc.
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Hello from ML Classification task! \n");
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Hello from ML Classification task!");
 
         // TODO: Classify here via MFCC model
 

@@ -1,25 +1,50 @@
-#include "cmn.h"
-#include "dsp_ml_setup.h"
+#include "lcd_ui_setup.h"
 
+#include "drivers/lcd_display.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include <cstring>
+#include "lvgl.h"
 
 static const char *LCD_UI_TASK_TAG = "LCD_UI_TASK";
 
-// void lcd_ui_task(void *arg)
-// {
-//     ESP_LOGI(LCD_UI_TASK_TAG, "Starting LVGL task");
-//     uint32_t time_till_next_ms = 0;
-//     while (1) 
-//     {
-//         _lock_acquire(&lvgl_api_lock);
-//         // Note: This is a very important call. It figures out what components changed, updates 
-//         // the DMA buffers with new pixels which then can be flushed out via the SPI driver
-//         time_till_next_ms = lv_timer_handler();
-//         _lock_release(&lvgl_api_lock);
+void bootup_screen_init(void * lcd_params)
+{
+    LCD_Display_Params* params = (LCD_Display_Params*)lcd_params;
 
-//         vTaskDelay(pdMS_TO_TICKS(10));
-//     }
-// }
+    // Turn the LCD display ON
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(params->panel_handle, true));
+
+    // Create components in the initial bootup screen
+    _lock_acquire(&params->lvgl_api_lock);
+
+    lv_obj_t *label = lv_label_create(lv_screen_active());
+    lv_label_set_text(label, "READY TO LISTEN");
+    lv_obj_set_style_text_color(label, lv_palette_main(LV_PALETTE_GREEN), 0);
+    lv_obj_center(label);
+
+    _lock_release(&params->lvgl_api_lock);
+}
+
+// Task that basically lets us render new lvgl components and tells the UI to constantly refresh
+// Note: Use the mutex when you use lvgl related resources
+void lcd_ui_task(void *lcd_ui_parameters)
+{
+    ESP_LOGI(LCD_UI_TASK_TAG, "Starting LCD UI task");
+
+    LCD_Display_Params* lcd_params = (LCD_Display_Params*)lcd_ui_parameters;
+    uint32_t time_till_next_ms = 0;
+
+    while (1) 
+    {
+        _lock_acquire(&lcd_params->lvgl_api_lock);
+
+        // Note: This is a very important call. It figures out what components changed, updates 
+        // the DMA buffers with new pixels which then can be flushed out via the SPI driver.
+        time_till_next_ms = lv_timer_handler();
+        
+        _lock_release(&lcd_params->lvgl_api_lock);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}

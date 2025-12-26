@@ -47,7 +47,7 @@ static void IRAM_ATTR push_button_isr(void *args)
     }
 }
 
-void setup_push_button(TaskHandle_t task, void *args)
+void configure_push_button(TaskHandle_t task, void *args)
 {
     target_task = task;
 
@@ -62,4 +62,6 @@ void setup_push_button(TaskHandle_t task, void *args)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
     ESP_ERROR_CHECK(gpio_isr_handler_add(PUSH_BUTTON_PIN, push_button_isr, (void*)args));
+
+    ESP_LOGI(BUTTON_DRIVER_TAG, "Record Button Setup Complete.");
 }

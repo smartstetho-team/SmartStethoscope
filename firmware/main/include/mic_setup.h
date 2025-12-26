@@ -14,5 +14,5 @@
 #define READ_LEN            1024             // Bytes to read per DMA block
 #define MASTER_AUDIO_BUFFER_SIZE (SAMPLE_FREQ_HZ*AUDIO_LENGTH*ADC_OUTPUT_LEN) // Size of master audio buffer (may need offset to prevent overflow)
 
-void init_mic_adc(adc_continuous_handle_t *handle);
+void configure_mic_adc(adc_continuous_handle_t *handle);
 void audio_sampling_task(void *audio_parameters);
