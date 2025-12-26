@@ -16,7 +16,7 @@ void ml_classification_task(void *dsp_ml_parameters)
 
     while (1)
     {
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Ready for ML classification.");
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Starting ML classification task");
 
         xEventGroupWaitBits(event_group_handle,
                             AUDIO_RECORDING_DONE_BIT, 

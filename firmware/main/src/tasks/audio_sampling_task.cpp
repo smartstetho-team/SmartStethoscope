@@ -50,7 +50,7 @@ void audio_sampling_task(void *audio_parameters)
 
     while (1)
     {
-        ESP_LOGI(AUDIO_TASK_TAG, "Ready for audio sampling.");
+        ESP_LOGI(AUDIO_TASK_TAG, "Starting audio sampling task");
         
         // Block audio sampling task until button pressed via hardware interrupt
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);

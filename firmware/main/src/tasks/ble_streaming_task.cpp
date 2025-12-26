@@ -15,7 +15,7 @@ void ble_streaming_task(void *ble_parameters)
 
     while (1)
     {
-        ESP_LOGI(BLE_TASK_TAG, "Ready for BLE streaming.");
+        ESP_LOGI(BLE_TASK_TAG, "Starting BLE streaming task");
 
         xEventGroupWaitBits(event_group_handle, 
                             AUDIO_RECORDING_DONE_BIT, 
