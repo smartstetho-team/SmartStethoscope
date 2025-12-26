@@ -86,8 +86,8 @@ extern "C" void app_main(void)
     xTaskCreate(ml_classification_task, "ml_classification_task", 8192, 
                 (void*)&parameters, 5, &ml_classification_task_handle);
 
-    // xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 
-    //             (void*)&lcd_params, 3, &lcd_ui_task_handle);
+    xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 
+                (void*)&lcd_params, 3, &lcd_ui_task_handle);
 
     // Set up button for the audio task
     configure_push_button(audio_sampling_task_handle, (void*)&parameters);
