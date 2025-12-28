@@ -5,6 +5,7 @@
 #include "ble_setup.h"
 #include "dsp_ml_setup.h"
 #include "lcd_ui_setup.h"
+#include "debug.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,51 +17,53 @@
 #include "lvgl.h"
 
 // Global variables
-global_params parameters;
+static const char *MAIN_TAG = "MAIN";
 
-// Common parameters
-adc_continuous_handle_t mic_adc_handle = NULL;
-uint8_t* master_audio_buffer = NULL;
-EventGroupHandle_t group_event_handle = NULL;
-LCD_Display_Params lcd_params;
+task_params task_parameters = 
+{
+    .master_audio_buffer = NULL,
+    .mic_adc_handle = NULL,
+    .event_group_handle = NULL,
+};
 
-// Task related
 TaskHandle_t audio_sampling_task_handle = NULL;
 TaskHandle_t ble_streaming_task_handle = NULL;
 TaskHandle_t ml_classification_task_handle = NULL;
 TaskHandle_t lcd_ui_task_handle = NULL;
-
-static const char *MAIN_TAG = "MAIN";
+TaskHandle_t debug_task_handle = NULL;
 
 extern "C" void app_main(void) 
 {
-    // Set up mutex for lvgl resources
-    _lock_init(&lcd_params.lvgl_api_lock);
+    // Set up UART for serial debugging
+    debug_init();
+
+    // Set up mutex for LVGL resources
+    _lock_init(&task_parameters.lcd_params.lvgl_api_lock);
 
     // Configure LCD display
-    configure_lcd_display(&lcd_params);
+    configure_lcd_display(&task_parameters.lcd_params);
 
     // Configure LVGL library and timer
-    configure_lcd_lvgl(&lcd_params);
+    configure_lcd_lvgl(&task_parameters.lcd_params);
 
     // Initialize bootup screen
-    bootup_screen_init((void*)&lcd_params);
+    bootup_screen_init((void*)&task_parameters.lcd_params);
 
     // Create event group so tasks can talk with each other
-    group_event_handle = xEventGroupCreate();
+    task_parameters.event_group_handle = xEventGroupCreate();
 
-    if (group_event_handle == NULL)
+    if (task_parameters.event_group_handle == NULL)
     {
         ESP_LOGE(MAIN_TAG, "Can't create group event handle!");
     }
 
     // Configure mic ADC
-    configure_mic_adc(&mic_adc_handle);
+    configure_mic_adc(&task_parameters.mic_adc_handle);
 
     // Allocate space for audio buffer in external RAM
-    master_audio_buffer = (uint8_t*)heap_caps_malloc(MASTER_AUDIO_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
+    task_parameters.master_audio_buffer = (uint8_t*)heap_caps_malloc(MASTER_AUDIO_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
 
-    if (master_audio_buffer == nullptr) 
+    if (task_parameters.master_audio_buffer == nullptr) 
     {
         ESP_LOGE(MAIN_TAG, "PSRAM Allocation Failed! Critical Error. \\
                  Current Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
@@ -71,24 +74,22 @@ extern "C" void app_main(void)
         }
     }
 
-    // Set up all important parameters that will be passed around
-    parameters.master_audio_buffer = master_audio_buffer;
-    parameters.mic_adc_handle = mic_adc_handle;
-    parameters.event_group_handle = group_event_handle;
-
     // Create all tasks
     xTaskCreate(audio_sampling_task, "audio_sampling_task", 8192, 
-                (void*)&parameters, 7, &audio_sampling_task_handle);
+                (void*)&task_parameters, 7, &audio_sampling_task_handle);
 
     xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, 
-                (void*)&parameters, 4, &ble_streaming_task_handle);
+                (void*)&task_parameters, 4, &ble_streaming_task_handle);
 
     xTaskCreate(ml_classification_task, "ml_classification_task", 8192, 
-                (void*)&parameters, 4, &ml_classification_task_handle);
+                (void*)&task_parameters, 4, &ml_classification_task_handle);
 
     xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 
-                (void*)&lcd_params, 2, &lcd_ui_task_handle);
+                (void*)&task_parameters, 2, &lcd_ui_task_handle);
+
+    xTaskCreate(debug_task, "debug_task", 8192, 
+                (void*)&task_parameters, 2, &debug_task_handle);
 
     // Set up button for the audio task
-    configure_push_button(audio_sampling_task_handle, (void*)&parameters);
+    configure_push_button(audio_sampling_task_handle, (void*)&task_parameters);
 }

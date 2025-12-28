@@ -21,8 +21,9 @@
 
 #define LVGL_DRAW_BUF_LINES  LCD_DISPLAY_HEIGHT_PXLS/4  // MODIFIABLE
 #define LVGL_TICK_PERIOD_MS     2                       // MODIFIABLE
-#define LVGL_TASK_STACK_SIZE 10240
-#define LVGL_TASK_PRIORITY 3
+
+#define LVGL_TASK_MAX_DELAY_MS  50
+#define LVGL_TASK_MIN_DELAY_MS  30
 
 typedef struct
 {

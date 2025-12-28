@@ -22,7 +22,7 @@ static void IRAM_ATTR push_button_isr(void *args)
     {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-        global_params* params = (global_params*)args;
+        task_params* params = (task_params*)args;
         EventGroupHandle_t event_group_handle = params->event_group_handle;
         EventBits_t uxBits = xEventGroupGetBitsFromISR(event_group_handle); // non-blocking call
 

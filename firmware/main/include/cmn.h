@@ -3,6 +3,7 @@
 
 #include "esp_adc/adc_continuous.h"
 #include "freertos/FreeRTOS.h"
+#include "drivers/lcd_display.h"
 
 // Event group bits
 #define AUDIO_RECORDING_START_BIT      (1 << 0)
@@ -17,9 +18,10 @@
 // Parameters to be used across all tasks
 typedef struct
 {
-    uint8_t* master_audio_buffer;
+    uint8_t* master_audio_buffer; // Buffer containing raw audio data (includes whole ADC packets)
     adc_continuous_handle_t mic_adc_handle;
     EventGroupHandle_t event_group_handle;
-} global_params;
+    LCD_Display_Params lcd_params;
+} task_params;
 
 #endif /* CMN_H */

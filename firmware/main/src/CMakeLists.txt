@@ -5,4 +5,5 @@ idf_component_register(SRCS "main.cpp"
                             "tasks/ble_streaming_task.cpp"
                             "tasks/ml_classification_task.cpp"
                             "tasks/lcd_ui_task.cpp"
+                            "tasks/debug_task.cpp"
                        INCLUDE_DIRS ".")

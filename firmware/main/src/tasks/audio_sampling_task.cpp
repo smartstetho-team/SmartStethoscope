@@ -5,7 +5,15 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "lvgl.h"
 #include <cstring>
+
+/*
+Raw ADC Packet Structure:
+- Bits 0-11: ADC Value (12 bit resolution)
+- Bits 13-16: ADC Channel (tells you which GPIO pin gave us the sample)
+- Bits 17: Tells you if it came from ADC1 or ADC2
+*/
 
 static const char *AUDIO_TASK_TAG = "AUDIO_TASK";
 
@@ -24,7 +32,7 @@ void configure_mic_adc(adc_continuous_handle_t *handle)
         .pattern_num = 1,
         .adc_pattern = (adc_digi_pattern_config_t[]) {
             {
-                .atten = ADC_ATTEN,
+                .atten = ADC_ATTENUATION,
                 .channel = ADC_CHANNEL,
                 .unit = ADC_UNIT,
                 .bit_width = ADC_BITWIDTH,
@@ -42,7 +50,7 @@ void audio_sampling_task(void *audio_parameters)
 {
     ESP_LOGI(AUDIO_TASK_TAG, "Starting audio sampling task");
 
-    global_params* params = (global_params*)audio_parameters;
+    task_params* params = (task_params*)audio_parameters;
     adc_continuous_handle_t handle = params->mic_adc_handle;
     uint8_t * master_audio_buffer = params->master_audio_buffer;
     EventGroupHandle_t event_group_handle = params->event_group_handle;
@@ -59,6 +67,22 @@ void audio_sampling_task(void *audio_parameters)
 
         ESP_LOGI(AUDIO_TASK_TAG, "Record button pressed! Sampling now..");
 
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+
+        lv_obj_clean(lv_screen_active());
+
+        lv_obj_t * record_spinner = lv_spinner_create(lv_screen_active());
+        lv_obj_set_size(record_spinner, 100, 100);
+        lv_obj_center(record_spinner);
+        lv_spinner_set_anim_params(record_spinner, 10000, 200);
+
+        lv_obj_t *start_label = lv_label_create(lv_screen_active());
+        lv_label_set_text(start_label, "Recording..");
+        lv_obj_set_style_text_font(start_label, &lv_font_montserrat_18, 0);
+        lv_obj_align(start_label, LV_ALIGN_CENTER, 0, 70);
+        
+        _lock_release(&params->lcd_params.lvgl_api_lock);
+
         int64_t sampling_start = esp_timer_get_time();
 
         // Start the DMA conversion
@@ -71,15 +95,29 @@ void audio_sampling_task(void *audio_parameters)
         {
             // Read from the DMA buffer
             esp_err_t err = adc_continuous_read(handle, read_buffer, READ_LEN, &bytes_read, 100);
-        
+
             if (err == ESP_OK) 
             {
-                memcpy(master_audio_buffer+total_bytes_read, read_buffer, bytes_read);
+                uint32_t remaining_bytes = bytes_needed - total_bytes_read;
+
+                if (bytes_read > remaining_bytes)
+                {
+                    bytes_read = remaining_bytes;
+                }
+
+                memcpy(master_audio_buffer + total_bytes_read, read_buffer, bytes_read);
+
                 total_bytes_read += bytes_read;
             }
+            // No data is available in the DMA buffer, so it times out
             else if (err == ESP_ERR_TIMEOUT) 
             {
                 ESP_LOGW(AUDIO_TASK_TAG, "ADC read from DMA buffer timed out, retrying...");
+            }
+            // occurs when the hardware fills the DMA buffers faster than the software can consume them
+            else if (err == ESP_ERR_INVALID_STATE) 
+            {
+                ESP_LOGE(AUDIO_TASK_TAG, "ADC Overrun! Data was lost.");
             }
         }
 
@@ -88,16 +126,31 @@ void audio_sampling_task(void *audio_parameters)
 
         int64_t sampling_end = esp_timer_get_time();
 
-        ESP_LOGI(AUDIO_TASK_TAG, "Sampling Time (ms): %d", (sampling_end-sampling_start)/1000.0f);
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+
+        lv_obj_clean(lv_screen_active());
+
+        lv_obj_t *end_label = lv_label_create(lv_screen_active());
+        lv_label_set_text(end_label, "Done Recording.");
+        lv_obj_center(end_label);
+        
+        lv_obj_t *end_sub_label = lv_label_create(lv_screen_active());
+        lv_label_set_text(end_sub_label, "Press button to record again.");
+        lv_obj_set_style_text_font(end_sub_label, &lv_font_montserrat_14, 0);
+        lv_obj_align(end_sub_label, LV_ALIGN_CENTER, 0, 60);
+
+        _lock_release(&params->lcd_params.lvgl_api_lock);
+
+        ESP_LOGI(AUDIO_TASK_TAG, "Sampling Time (ms): %d", (uint32_t)((sampling_end-sampling_start)/1000.0f));
         ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.");
 
         // Output ADC value every 100th sample (USE FOR DEBUGGING)
-        for (int i = 0; i < total_bytes_read; i += 100*ADC_OUTPUT_LEN)
-        {
-            adc_digi_output_data_t *sample = (adc_digi_output_data_t*)&master_audio_buffer[i];
-            ESP_LOGI(AUDIO_TASK_TAG, "%ld", sample->type2.data);
-            vTaskDelay(pdMS_TO_TICKS(1)); // yield CPU so we actually give it time to print the data properly
-        }
+        // for (int i = 0; i < total_bytes_read; i += 100*ADC_OUTPUT_LEN)
+        // {
+        //     adc_digi_output_data_t *sample = (adc_digi_output_data_t*)&master_audio_buffer[i];
+        //     ESP_LOGI(AUDIO_TASK_TAG, "%ld", sample->type2.data);
+        //     vTaskDelay(pdMS_TO_TICKS(1)); // yield CPU so we actually give it time to print the data properly
+        // }
 
         xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_START_BIT);
         xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 

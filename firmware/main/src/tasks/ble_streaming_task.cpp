@@ -11,8 +11,8 @@ void ble_streaming_task(void *ble_parameters)
 {
     ESP_LOGI(BLE_TASK_TAG, "Starting BLE streaming task");
     
-    global_params* params = (global_params*)ble_parameters;
-    uint8_t * master_audio_buffer = params->master_audio_buffer; // AUDIO DATA WILL COME HERE
+    task_params* params = (task_params*)ble_parameters;
+    uint8_t * master_audio_buffer = params->master_audio_buffer;
     EventGroupHandle_t event_group_handle = params->event_group_handle;
 
     while (1)

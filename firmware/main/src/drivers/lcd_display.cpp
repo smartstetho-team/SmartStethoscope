@@ -28,8 +28,6 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
     // because SPI LCD is big-endian, we need to swap the RGB bytes order
     lv_draw_sw_rgb565_swap(px_map, (offsetx2 + 1 - offsetx1) * (offsety2 + 1 - offsety1));
 
-    ESP_LOGI(LCD_DISPLAY_DRIVER_TAG, "Flushing data to LCD display.");
-
     // copy a buffer's content to a specific area of the display
     esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, px_map); // is what draws everything
 }
