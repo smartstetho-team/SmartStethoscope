@@ -11,10 +11,18 @@ SAMPLE_RATE = 8000
 RECORD_SECONDS = 10
 NUM_SAMPLES = SAMPLE_RATE * RECORD_SECONDS
 
-OUTPUT_WAV = "stethoscope_raw_audio.wav"
+OUTPUT_WAV = "../recordings/stethoscope_raw_audio.wav"
 
 print("Opening serial port...")
-ser = serial.Serial(PORT, BAUD, timeout=2, dsrdtr=False, rtscts=False)
+ser = serial.Serial()
+ser.port = PORT
+ser.baudrate = BAUD
+ser.timeout = 2
+ser.dsrdtr = False
+ser.rtscts = False
+ser.dtr = False
+ser.rts = False
+ser.open()
 
 # Give board time + flush any old text
 time.sleep(2)
@@ -34,7 +42,7 @@ while len(buf) < needed_bytes:
         break
     buf.extend(chunk)
 
-# ser.close()
+ser.close()
 
 print(f"Collected {len(buf)//4} samples (expected {NUM_SAMPLES}).")
 

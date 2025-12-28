@@ -13,12 +13,20 @@ SAMPLE_RATE = 8000
 RECORD_SECONDS = 10
 NUM_SAMPLES = SAMPLE_RATE * RECORD_SECONDS
 
-OUTPUT_WAV = "stethoscope_test.wav"
-OUTPUT_WAV_CLEAN = "stethoscope_heart_clean.wav"
+OUTPUT_WAV = "../recordings/stethoscope_test.wav"
+OUTPUT_WAV_CLEAN = "../recordings/stethoscope_heart_clean.wav"
 
 
 print("Opening serial port...")
-ser = serial.Serial(PORT, BAUD, timeout=2, dsrdtr=False, rtscts=False)
+ser = serial.Serial()
+ser.port = PORT
+ser.baudrate = BAUD
+ser.timeout = 2
+ser.dsrdtr = False
+ser.rtscts = False
+ser.dtr = False
+ser.rts = False
+ser.open()
 
 # Give board time + flush any old text
 time.sleep(2)
@@ -107,5 +115,3 @@ heart = butter_bandpass(data_notched, fs, 30, 150, order=3)
 
 save_wav(OUTPUT_WAV_CLEAN, heart, fs)
 print(f"Saved processed file: {OUTPUT_WAV_CLEAN}")
-
-

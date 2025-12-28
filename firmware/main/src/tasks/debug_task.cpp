@@ -35,7 +35,7 @@ void debug_task(void *debug_parameters)
     task_params* params = (task_params*)debug_parameters;
     uint8_t * master_audio_buffer = params->master_audio_buffer;
 
-    uint8_t serial_cmd;
+    uint8_t serial_cmd = 0;
     while (1)
     {
         if (usb_serial_jtag_read_bytes(&serial_cmd, 1, 100) > 0)
@@ -48,15 +48,17 @@ void debug_task(void *debug_parameters)
                     memcpy(&sample, &master_audio_buffer[i], sizeof(adc_digi_output_data_t));
                     uint16_t value = (uint16_t)sample.type2.data;
 
+                    // Convert data to big endian
                     uint8_t debug_audio_packet[4] = {(uint8_t)(value >> 8), (uint8_t)(value & 0xFF), 0, 0};
-                    usb_serial_jtag_write_bytes(debug_audio_packet, 4, 0);
+                    usb_serial_jtag_write_bytes(debug_audio_packet, 4, 10);
                     
-                    // Feed the watchdog timer
+                    // Feed the watchdog timer every 1024 bytes (every 256 samples)
                     if ((i % 1024) == 0) 
                     {
                         vTaskDelay(pdMS_TO_TICKS(1));
                     }
                 }
+                serial_cmd = 0;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(10));
