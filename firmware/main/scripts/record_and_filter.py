@@ -18,7 +18,7 @@ OUTPUT_WAV_CLEAN = "stethoscope_heart_clean.wav"
 
 
 print("Opening serial port...")
-ser = serial.Serial(PORT, BAUD, timeout=2)
+ser = serial.Serial(PORT, BAUD, timeout=2, dsrdtr=False, rtscts=False)
 
 # Give board time + flush any old text
 time.sleep(2)
@@ -48,7 +48,7 @@ while len(buf) < needed_bytes:
 
 ser.close()
 
-print(f"Collected {len(buf)//2} samples (expected {NUM_SAMPLES}).")
+print(f"Collected {len(buf)//4} samples (expected {NUM_SAMPLES}).")
 
 if len(buf) < 2:
     print("No data, nothing to save.")

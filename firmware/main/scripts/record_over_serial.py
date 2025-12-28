@@ -11,11 +11,10 @@ SAMPLE_RATE = 8000
 RECORD_SECONDS = 10
 NUM_SAMPLES = SAMPLE_RATE * RECORD_SECONDS
 
-OUTPUT_WAV = "stethoscope_test.wav"
-OUTPUT_WAV_CLEAN = "stethoscope_heart_clean.wav"
+OUTPUT_WAV = "stethoscope_raw_audio.wav"
 
 print("Opening serial port...")
-ser = serial.Serial(PORT, BAUD, timeout=2)
+ser = serial.Serial(PORT, BAUD, timeout=2, dsrdtr=False, rtscts=False)
 
 # Give board time + flush any old text
 time.sleep(2)
@@ -35,9 +34,9 @@ while len(buf) < needed_bytes:
         break
     buf.extend(chunk)
 
-ser.close()
+# ser.close()
 
-print(f"Collected {len(buf)//2} samples (expected {NUM_SAMPLES}).")
+print(f"Collected {len(buf)//4} samples (expected {NUM_SAMPLES}).")
 
 if len(buf) < 2:
     print("No data, nothing to save.")
@@ -46,6 +45,8 @@ if len(buf) < 2:
 # Convert bytes -> numpy array
 samples = []
 for i in range(0, len(buf), 4):
+    if i + 2 > len(buf): 
+        break
     (raw_val,) = struct.unpack('>H', buf[i:i+2])  # 0..4095-ish
     value = raw_val & 0x0FFF
     samples.append(value)
