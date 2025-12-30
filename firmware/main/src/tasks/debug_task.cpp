@@ -10,20 +10,9 @@
 #include <hal/uart_types.h>
 
 static const char *DEBUG_TASK_TAG = "DEBUG_TASK";
-static const uart_port_t uart_num = UART_NUM_0;
-
-uart_config_t uart_config = {
-    .baud_rate = 921600,
-    .data_bits = UART_DATA_8_BITS,
-    .parity = UART_PARITY_DISABLE,
-    .stop_bits = UART_STOP_BITS_1,
-    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-};
 
 void debug_init()
 {
-    // ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
-    // ESP_ERROR_CHECK(uart_driver_install(uart_num, 1024, 1024, 0, NULL, 0));
     usb_serial_jtag_driver_config_t cfg = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
     usb_serial_jtag_driver_install(&cfg);
 }
