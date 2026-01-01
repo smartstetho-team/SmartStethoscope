@@ -144,14 +144,6 @@ void audio_sampling_task(void *audio_parameters)
         ESP_LOGI(AUDIO_TASK_TAG, "Sampling Time (ms): %d", (uint32_t)((sampling_end-sampling_start)/1000.0f));
         ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.");
 
-        // Output ADC value every 100th sample (USE FOR DEBUGGING)
-        // for (int i = 0; i < total_bytes_read; i += 100*ADC_OUTPUT_LEN)
-        // {
-        //     adc_digi_output_data_t *sample = (adc_digi_output_data_t*)&master_audio_buffer[i];
-        //     ESP_LOGI(AUDIO_TASK_TAG, "%ld", sample->type2.data);
-        //     vTaskDelay(pdMS_TO_TICKS(1)); // yield CPU so we actually give it time to print the data properly
-        // }
-
         xEventGroupClearBits(event_group_handle, AUDIO_RECORDING_START_BIT);
         xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_DONE_BIT | 
                            BLE_STREAMING_START_BIT | ML_CLASSIFICATION_START_BIT);
