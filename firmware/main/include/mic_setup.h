@@ -14,6 +14,7 @@
 #define SAMPLE_FREQ_HZ      8000             // 8kHz sampling rate (125us between each sample)
 #define AUDIO_LENGTH        10               // Recorded audio length in seconds
 #define READ_LEN            1024             // Bytes to read per DMA block
+#define NUM_OF_SAMPLES      (SAMPLE_FREQ_HZ * AUDIO_LENGTH) // Number of samples
 #define MASTER_AUDIO_BUFFER_SIZE (SAMPLE_FREQ_HZ * AUDIO_LENGTH * ADC_OUTPUT_LEN) // Size of master audio buffer (may need offset to prevent overflow)
 
 void configure_mic_adc(adc_continuous_handle_t *handle);

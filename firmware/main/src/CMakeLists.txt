@@ -6,4 +6,5 @@ idf_component_register(SRCS "main.cpp"
                             "tasks/ml_classification_task.cpp"
                             "tasks/lcd_ui_task.cpp"
                             "tasks/debug_task.cpp"
-                       INCLUDE_DIRS ".")
+                       INCLUDE_DIRS "."
+                       REQUIRES esp-dsp lvgl)

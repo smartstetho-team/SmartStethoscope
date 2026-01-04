@@ -1,9 +1,19 @@
+'''
+Docstring for scripts.filtering_test
+
+This script was made to experiment with different filters and seeing
+how we can modify recorded sounds under various conditions.
+
+'''
+
 import serial
 import wave
 import struct
 import time
 import numpy as np
-import sys as sys
+
+from filter import load_wav, notch_filter, butter_bandpass, save_wav
+from plotting import plot_comparison
 
 PORT = "COM5"  # adjust if different
 BAUD = 921600
@@ -12,6 +22,7 @@ RECORD_SECONDS = 10
 NUM_SAMPLES = SAMPLE_RATE * RECORD_SECONDS
 
 OUTPUT_WAV = "../recordings/stethoscope_raw_audio.wav"
+OUTPUT_WAV_CLEAN = "../recordings/stethoscope_heart_clean.wav"
 
 print("Opening serial port...")
 ser = serial.Serial()
@@ -28,9 +39,8 @@ ser.open()
 time.sleep(2)
 ser.reset_input_buffer()
 
-cmd = sys.argv[1]
-print(f"Sending '{cmd}' to start recording...")
-ser.write(cmd.encode())
+print("Sending 'r' to start recording...")
+ser.write(b"f")
 
 print("Reading samples from ESP32...")
 needed_bytes = NUM_SAMPLES * 4
@@ -54,8 +64,6 @@ if len(buf) < 2:
 # Convert bytes -> numpy array
 samples = []
 for i in range(0, len(buf), 4):
-    if i + 2 > len(buf): 
-        break
     (raw_val,) = struct.unpack('>H', buf[i:i+2])  # 0..4095-ish
     value = raw_val & 0x0FFF
     samples.append(value)
@@ -74,3 +82,18 @@ with wave.open(OUTPUT_WAV, "w") as wf:
     wf.writeframes(samples_pcm.tobytes())
 
 print(f"Saved RAW {OUTPUT_WAV}")
+
+# Perform filtering
+print(f"Loading {OUTPUT_WAV}...")
+data, fs = load_wav(OUTPUT_WAV)
+
+if len(data) == 0:
+    print("FAILED TO GET DATA FROM RAW WAVE FILE")
+
+print(f"Sample rate: {fs} Hz, Length: {len(data)/fs:.2f}s")
+
+data = data - np.mean(data) # remove dc offset
+heart = butter_bandpass(data, fs, 30, 500, order=4) # apply bandpass filter
+
+plot_comparison(data, heart, fs)
+save_wav(OUTPUT_WAV_CLEAN, heart, fs)

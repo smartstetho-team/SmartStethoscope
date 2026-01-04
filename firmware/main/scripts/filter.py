@@ -2,7 +2,7 @@ import wave
 import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch
 
-IN_FILE = "stethoscope_test_pot_bottom.wav" # Or your bottom file
+IN_FILE = "stethoscope_test_pot_bottom.wav"
 HEART_FILE = "stethoscope_heart_clean_bottom.wav"
 
 def load_wav(path):
@@ -22,6 +22,7 @@ def load_wav(path):
 
 def save_wav(path, data, fs):
     # Normalize before saving to maximize volume without clipping
+    data = np.nan_to_num(data)
     max_val = np.max(np.abs(data))
     if max_val > 0:
         data = data / max_val * 0.9  # Normalize to 90% volume

@@ -22,8 +22,10 @@ static const char *MAIN_TAG = "MAIN";
 task_params task_parameters = 
 {
     .master_audio_buffer = NULL,
+    .filtered_audio_buffer = NULL,
+    .audio_dc_offset = 0,
     .mic_adc_handle = NULL,
-    .event_group_handle = NULL,
+    .event_group_handle = NULL
 };
 
 TaskHandle_t audio_sampling_task_handle = NULL;
@@ -34,7 +36,7 @@ TaskHandle_t debug_task_handle = NULL;
 
 extern "C" void app_main(void) 
 {
-    // Set up UART for serial debugging
+    // Set up driver for serial debugging
     debug_init();
 
     // Set up mutex for LVGL resources
@@ -57,13 +59,20 @@ extern "C" void app_main(void)
         ESP_LOGE(MAIN_TAG, "Can't create group event handle!");
     }
 
-    // Configure mic ADC
+    // Configure Mic ADC
     configure_mic_adc(&task_parameters.mic_adc_handle);
 
     // Allocate space for audio buffer in external RAM
-    task_parameters.master_audio_buffer = (uint8_t*)heap_caps_malloc(MASTER_AUDIO_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
+    task_parameters.master_audio_buffer = (uint8_t*)heap_caps_malloc
+                                          (MASTER_AUDIO_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
 
-    if (task_parameters.master_audio_buffer == nullptr) 
+    // Allocate space for filtered audio buffer in external RAM
+    // Note: Size is halved since we only need ADC value instead of the whole packet
+    task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
+                                            (MASTER_AUDIO_BUFFER_SIZE/2 * sizeof(float), MALLOC_CAP_SPIRAM);
+
+    if (task_parameters.master_audio_buffer == nullptr || 
+        task_parameters.filtered_audio_buffer == nullptr)
     {
         ESP_LOGE(MAIN_TAG, "PSRAM Allocation Failed! Critical Error. \\
                  Current Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));

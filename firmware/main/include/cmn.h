@@ -15,13 +15,15 @@
 #define ML_CLASSIFICATION_START_BIT    (1 << 4)
 #define ML_CLASSIFICATION_END_BIT      (1 << 5)
 
-// Parameters to be used across all tasks
+// Parameters to be used between tasks
 typedef struct
 {
-    uint8_t* master_audio_buffer; // Buffer containing raw audio data (includes whole ADC packets)
-    adc_continuous_handle_t mic_adc_handle;
-    EventGroupHandle_t event_group_handle;
-    LCD_Display_Params lcd_params;
+    uint8_t* master_audio_buffer;           // Buffer containing raw audio data
+    float* filtered_audio_buffer;           // Buffer containing filtered audio data
+    float audio_dc_offset;                  // Calculated DC offset from raw audio data
+    adc_continuous_handle_t mic_adc_handle; // Reference Handle to our ADC Mic
+    EventGroupHandle_t event_group_handle;  // Reference Handle to our event groups
+    LCD_Display_Params lcd_params;          // Parameters for the LCD Dispkay
 } task_params;
 
 #endif /* CMN_H */
