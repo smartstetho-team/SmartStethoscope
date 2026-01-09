@@ -23,14 +23,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # This is the magic line: it points to your subfolder
-          - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Point this exactly to your website folder
-          path: './software/team-website/'
+          path: "software/team-website"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
