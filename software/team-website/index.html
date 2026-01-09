@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CardioScope | AI Stethoscope</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <nav>
+      <div class="container">
+        <div class="logo">CARDIO<b>SCOPE</b></div>
+        <ul>
+          <li><a href="#about">About</a></li>
+          <li><a href="#tech">Technology</a></li>
+          <li><a href="#team">Team</a></li>
+          <li>
+            <a
+              href="https://github.com/smartstetho-team/SmartStethoscope"
+              target="_blank"
+              >GitHub</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://www.notion.so/Design-Log-2686d23b914c800d914ee212999964b0"
+              class="btn-nav"
+              target="_blank"
+              >Design Log →</a
+            >
+          </li>
+        </ul>
+      </div>
+    </nav>
+
+    <header id="about">
+      <div class="container">
+        <span class="tag">UW Engineering Capstone 2026</span>
+        <h1>
+          Smart Cardiac Monitoring. <br /><span class="highlight"
+            >Powered by Edge AI.</span
+          >
+        </h1>
+        <p>
+          CardioScope is an automated stethoscope system that leverages deep
+          learning to detect heart murmurs and respiratory issues in real-time.
+        </p>
+        <div class="hero-btns">
+          <a href="#tech" class="btn-primary">View Specs</a>
+          <a
+            href="https://github.com/smartstetho-team/SmartStethoscope"
+            target="_blank"
+            class="btn-secondary"
+            >Source Code</a
+          >
+        </div>
+        <div class="hero-image">
+          <img
+            src="cardioScope.png"
+            alt="CardioScope AI Device and Mobile Interface"
+          />
+        </div>
+      </div>
+    </header>
+
+    <section id="tech" class="tech-grid">
+      <div class="container">
+        <div class="section-header">
+          <h2>Technical Architecture</h2>
+          <p>
+            A hybrid classification approach combining on-device processing with
+            cloud-level neural accuracy.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <div class="tech-card">
+            <div class="icon">🧠</div>
+            <h3>ResNet-24 Model</h3>
+            <p>
+              88% Specificity achieved via a 24-layer residual network trained
+              on clinical heart sound datasets.
+            </p>
+          </div>
+          <div class="tech-card">
+            <div class="icon">⚡</div>
+            <h3>Edge Processing</h3>
+            <p>
+              Optimized ESP32 firmware using FreeRTOS and ESP-DSP for
+              hardware-accelerated filtering.
+            </p>
+          </div>
+          <div class="tech-card">
+            <div class="icon">📶</div>
+            <h3>Seamless Sync</h3>
+            <p>
+              BLE 5.0 communication between the custom hardware module and the
+              CardioScope mobile app.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="performance">
+      <div class="container">
+        <div class="stats-box">
+          <div class="stat">
+            <h4>76%</h4>
+            <p>Sensitivity</p>
+          </div>
+          <div class="stat">
+            <h4>88%</h4>
+            <p>Specificity</p>
+          </div>
+          <div class="stat">
+            <h4>&lt;100ms</h4>
+            <p>Inference Latency</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="notion-cta">
+      <div class="container">
+        <div class="cta-card">
+          <h2>Follow Our Development</h2>
+          <p>
+            From initial brainstorming and patent research to PCB layout and
+            FreeRTOS implementation.
+          </p>
+          <div class="cta-btns">
+            <a
+              href="https://www.notion.so/Design-Log-2686d23b914c800d914ee212999964b0"
+              target="_blank"
+              class="btn-primary"
+              >Open Notion Design Log</a
+            >
+            <a
+              href="https://github.com/smartstetho-team/SmartStethoscope"
+              target="_blank"
+              class="btn-github"
+              >View on GitHub</a
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="team" class="team-section">
+      <div class="container">
+        <h2>The Team</h2>
+        <div class="grid-4">
+          <div class="member"><strong>Om Patel</strong><br />Mechanical</div>
+          <div class="member">
+            <strong>Rijin Muralidharan</strong><br />Electrical/Firmware
+          </div>
+          <div class="member">
+            <strong>Roby Aldave-Garza</strong><br />ML Software
+          </div>
+          <div class="member">
+            <strong>Krish Vijayan</strong><br />Mobile/Systems
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="container">
+        <p>&copy; 2026 CardioScope Team. Built for University of Waterloo.</p>
+      </div>
+    </footer>
+  </body>
+</html>
