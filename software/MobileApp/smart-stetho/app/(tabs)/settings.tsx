@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Platform,
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -17,11 +18,19 @@ import { Fonts } from "@/constants/theme";
 import BleScannerModal from "@/components/BleScannerModal";
 import { getManager } from "@/utils/ble-manager";
 
+// NEW COLOR PALETTE
+const COLORS = {
+  primary: "#3498db", // Medical Blue
+  background: "#FFFFFF",
+  card: "#000000",
+  textHeader: "#000000",
+  textMuted: "#8E8E93",
+  danger: "#FF3B30",
+};
+
 export default function SettingsScreen() {
   const [isCloudSync, setIsCloudSync] = useState(true);
   const [isNoiseCancelling, setIsNoiseCancelling] = useState(false);
-
-  // Bluetooth States
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<any>(null);
 
@@ -54,7 +63,7 @@ export default function SettingsScreen() {
     >
       <View style={styles.rowLeft}>
         <View style={styles.iconContainer}>
-          <IconSymbol name={icon} size={20} color="#007AFF" />
+          <IconSymbol name={icon} size={18} color={COLORS.primary} />
         </View>
         <ThemedText style={styles.rowLabel}>{label}</ThemedText>
       </View>
@@ -63,7 +72,8 @@ export default function SettingsScreen() {
           <Switch
             value={toggle}
             onValueChange={onPress}
-            trackColor={{ true: "#34C759" }}
+            trackColor={{ false: "#333", true: COLORS.primary }}
+            ios_backgroundColor="#333"
           />
         ) : (
           <>
@@ -72,7 +82,7 @@ export default function SettingsScreen() {
             >
               {value}
             </ThemedText>
-            <IconSymbol name="chevron.right" size={14} color="#C7C7CC" />
+            <IconSymbol name="chevron.right" size={14} color="#444" />
           </>
         )}
       </View>
@@ -82,7 +92,7 @@ export default function SettingsScreen() {
   const handleUnpairAndReset = () => {
     Alert.alert(
       "Unpair & Reset",
-      "This will disconnect the stethoscope and wipe local recordings. Are you sure?",
+      "This will disconnect the stethoscope. Are you sure?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -92,23 +102,11 @@ export default function SettingsScreen() {
             if (connectedDevice) {
               try {
                 const manager = getManager();
-                // 1. Physically break the BLE connection
                 await manager.cancelDeviceConnection(connectedDevice.id);
-
-                // 2. Clear the local app state
                 setConnectedDevice(null);
-
-                console.log("Device unpaired successfully");
               } catch (e) {
-                console.error("Failed to unpair:", e);
-                // Fallback: Clear state anyway if device is already gone
                 setConnectedDevice(null);
               }
-            } else {
-              Alert.alert(
-                "No Device",
-                "There is no stethoscope currently paired."
-              );
             }
           },
         },
@@ -116,68 +114,27 @@ export default function SettingsScreen() {
     );
   };
 
-  // Need to read battery service: Battery Service (0x180F)
-  const handleBatteryLife = () => {
-    console.log("90%");
-  };
-
-  // Add this at the top of explore.tsx
-  const decodeBleString = (base64Value: string | null) => {
-    if (!base64Value) return "No Data";
-    try {
-      return atob(base64Value); // Converts Base64 to plain text
-    } catch (e) {
-      return "Decode Error";
-    }
-  };
-
-  const readManufacturer = async () => {
-    if (!connectedDevice) {
-      Alert.alert("Not Connected", "Please connect to your MacBook first.");
-      return;
-    }
-
-    try {
-      // 1. Target the Device Info Service (180A) and Manufacturer Char (2A29)
-      const characteristic = await connectedDevice.readCharacteristicForService(
-        "0000180A-0000-1000-8000-00805f9b34fb",
-        "00002A29-0000-1000-8000-00805f9b34fb"
-      );
-
-      // 2. Decode the result
-      const name = decodeBleString(characteristic.value);
-
-      // 3. Show the result
-      Alert.alert("MacBook Info", `Manufacturer: ${name}`);
-    } catch (e: any) {
-      console.log("Read failed:", e);
-      Alert.alert(
-        "Read Failed",
-        "Make sure the device is still in range and connected."
-      );
-    }
-  };
-
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
-          Settings
-        </ThemedText>
+        <ThemedText style={styles.headerTitle}>Settings</ThemedText>
+        <ThemedText style={styles.subtitle}>CardioScope Platform</ThemedText>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <Section title="DEVICE STATUS">
           <SettingRow
             icon="stethoscope"
             label="Hardware Link"
-            // Displays device name or "Not Connected"
             value={
               connectedDevice
                 ? connectedDevice.name || "Connected"
-                : "Not Connected"
+                : "Not Linked"
             }
-            valueColor={connectedDevice ? "#34C759" : "#8E8E93"}
+            valueColor={connectedDevice ? COLORS.primary : COLORS.textMuted}
             onPress={() => setIsScannerVisible(true)}
           />
           <SettingRow
@@ -185,13 +142,6 @@ export default function SettingsScreen() {
             label="Stetho Battery"
             value={connectedDevice ? "84%" : "--"}
             isLast={true}
-            onPress={() => {
-              if (connectedDevice) {
-                readManufacturer(); // Read from Mac if already linked
-              } else {
-                setIsScannerVisible(true); // Open scanner if not linked
-              }
-            }}
           />
         </Section>
 
@@ -227,7 +177,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.dangerZone}
-          onPress={handleUnpairAndReset} // Updated this
+          onPress={handleUnpairAndReset}
         >
           <ThemedText style={styles.dangerText}>
             Unpair & Reset Device
@@ -235,11 +185,10 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <ThemedText style={styles.versionLabel}>
-          SmartStetho Platform • Version 1.0.2
+          Version 1.0.2 • Powered by SmartStetho
         </ThemedText>
       </ScrollView>
 
-      {/* BLUETOOTH SCANNER MODAL */}
       <Modal
         animationType="slide"
         presentationStyle="pageSheet"
@@ -259,67 +208,85 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F2F2F7" },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: "#FFF",
+    paddingTop: Platform.OS === "ios" ? 80 : 50,
+    paddingHorizontal: 25,
+    paddingBottom: 15,
+    backgroundColor: COLORS.background,
   },
   headerTitle: {
-    fontFamily: Fonts.rounded,
     fontSize: 34,
-    fontWeight: "bold",
+    fontWeight: "900",
+    color: COLORS.textHeader,
+    letterSpacing: -1,
+    lineHeight: 42, // Ensures the top of the 'S' is safe
+  },
+  subtitle: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: 4,
   },
   scrollContent: { paddingBottom: 40 },
-  section: { marginTop: 24, paddingHorizontal: 16 },
+  section: { marginTop: 24, paddingHorizontal: 20 },
   sectionHeader: {
-    fontSize: 13,
-    color: "#8E8E93",
-    marginBottom: 8,
-    marginLeft: 8,
-    fontWeight: "600",
+    fontSize: 12,
+    color: COLORS.textHeader,
+    marginBottom: 10,
+    marginLeft: 4,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   card: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
     overflow: "hidden",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#C6C6C8",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1c1c1e",
   },
   rowLeft: { flexDirection: "row", alignItems: "center" },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: "#E1EFFF",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#1c1c1e",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 15,
   },
-  rowLabel: { fontSize: 17, color: "#000" },
-  rowRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rowValue: { fontSize: 17, color: "#8E8E93" },
+  rowLabel: { fontSize: 16, color: "#FFFFFF", fontWeight: "600" },
+  rowRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rowValue: { fontSize: 16, color: COLORS.textMuted, fontWeight: "500" },
   dangerZone: {
     marginTop: 32,
-    marginHorizontal: 16,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 16,
+    marginHorizontal: 20,
+    backgroundColor: "#000",
+    borderRadius: 16,
+    padding: 18,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1c1c1e",
   },
-  dangerText: { color: "#FF3B30", fontSize: 17, fontWeight: "600" },
+  dangerText: { color: COLORS.danger, fontSize: 16, fontWeight: "700" },
   versionLabel: {
     textAlign: "center",
-    marginTop: 20,
-    color: "#8E8E93",
-    fontSize: 13,
+    marginTop: 25,
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
   },
 });
