@@ -1,3 +1,4 @@
 dependencies:
   espressif/esp-dsp: "^1.7.0"
   lvgl/lvgl: "^9.2.2"
+  h2zero/esp-nimble-cpp: "^2.3.4"

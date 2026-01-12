@@ -7,4 +7,4 @@ idf_component_register(SRCS "main.cpp"
                             "tasks/lcd_ui_task.cpp"
                             "tasks/debug_task.cpp"
                        INCLUDE_DIRS "."
-                       REQUIRES esp-dsp lvgl)
+                       REQUIRES esp-dsp lvgl esp-nimble-cpp)
