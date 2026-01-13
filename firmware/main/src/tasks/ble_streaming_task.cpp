@@ -4,8 +4,39 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "NimBLEDevice.h"
 
 static const char *BLE_TASK_TAG = "BLE_TASK";
+static const char *SERVICE_UUID = "a99a483c-c54e-4ec7-970f-01603a73ca20";
+static const char *CHARACTERISTIC_UUID_TX = "9ae10c51-adcc-4171-9ec7-19e565e13fa3";
+
+NimBLEServer* p_server = NULL;
+NimBLEService* p_service = NULL;
+NimBLEAdvertising* p_advertising = NULL;
+NimBLECharacteristic* p_tx_characteristic = NULL;
+
+void ble_init()
+{
+    NimBLEDevice::init("SmartStethoscope");
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    
+    p_server = NimBLEDevice::createServer();
+    p_service = p_server->createService(SERVICE_UUID);
+
+    p_tx_characteristic = p_service->createCharacteristic(
+        CHARACTERISTIC_UUID_TX,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
+    p_service->start();
+
+    p_advertising = NimBLEDevice::getAdvertising();
+    p_advertising->addServiceUUID(SERVICE_UUID);
+
+    p_advertising->start();
+
+    ESP_LOGI(BLE_TASK_TAG, "BLE Streaming Service Started!");
+}
 
 void ble_streaming_task(void *ble_parameters)
 {

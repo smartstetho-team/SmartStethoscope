@@ -15,6 +15,7 @@
 #include "esp_adc/adc_continuous.h"
 #include "esp_log.h"
 #include "lvgl.h"
+#include "nvs_flash.h"
 
 // Global variables
 static const char *MAIN_TAG = "MAIN";
@@ -38,6 +39,18 @@ extern "C" void app_main(void)
 {
     // Set up driver for serial debugging
     debug_init();
+
+    // Set up non-volatile storage for BLE params
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || 
+        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) 
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+
+    // Initialize BLE for audio packet streaming
+    ble_init();
 
     // Set up mutex for LVGL resources
     _lock_init(&task_parameters.lcd_params.lvgl_api_lock);
