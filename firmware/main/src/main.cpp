@@ -25,7 +25,9 @@ task_params task_parameters =
     .filtered_audio_buffer = NULL,
     .audio_dc_offset = 0,
     .mic_adc_handle = NULL,
-    .event_group_handle = NULL
+    .event_group_handle = NULL,
+    .inference_buffer_a = NULL,
+    .inference_buffer_b = NULL
 };
 
 TaskHandle_t audio_sampling_task_handle = NULL;
@@ -61,6 +63,8 @@ extern "C" void app_main(void)
 
     // Configure Mic ADC
     configure_mic_adc(&task_parameters.mic_adc_handle);
+    
+    ESP_LOGI(MAIN_TAG, "PSRAM Size Before: %d", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
     // Allocate space for audio buffer in external RAM
     task_parameters.master_audio_buffer = (uint8_t*)heap_caps_malloc
@@ -71,8 +75,13 @@ extern "C" void app_main(void)
     task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
                                             (MASTER_AUDIO_BUFFER_SIZE/2 * sizeof(float), MALLOC_CAP_SPIRAM);
 
+    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3 * 1024 * 1024, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3 * 1024 * 1024, MALLOC_CAP_SPIRAM);
+
     if (task_parameters.master_audio_buffer == nullptr || 
-        task_parameters.filtered_audio_buffer == nullptr)
+        task_parameters.filtered_audio_buffer == nullptr ||
+        task_parameters.inference_buffer_a == nullptr ||
+        task_parameters.inference_buffer_b == nullptr)
     {
         ESP_LOGE(MAIN_TAG, "PSRAM Allocation Failed! Critical Error. \\
                  Current Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
@@ -83,6 +92,8 @@ extern "C" void app_main(void)
         }
     }
 
+    ESP_LOGI(MAIN_TAG, "PSRAM Size After: %d", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
     // Create all tasks
     xTaskCreate(audio_sampling_task, "audio_sampling_task", 8192, 
                 (void*)&task_parameters, 7, &audio_sampling_task_handle);
@@ -90,7 +101,7 @@ extern "C" void app_main(void)
     xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, 
                 (void*)&task_parameters, 4, &ble_streaming_task_handle);
 
-    xTaskCreate(ml_classification_task, "ml_classification_task", 8192, 
+    xTaskCreate(ml_classification_task, "ml_classification_task", 12288, 
                 (void*)&task_parameters, 4, &ml_classification_task_handle);
 
     xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 

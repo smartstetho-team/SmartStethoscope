@@ -1,5 +1,6 @@
 #include "dsp_ml_setup.h"
 #include "mic_setup.h"
+#include "heart_inference.h"
 
 #include "cmn.h"
 #include "freertos/FreeRTOS.h"
@@ -23,6 +24,9 @@ void ml_classification_task(void *dsp_ml_parameters)
     task_params* params = (task_params*)dsp_ml_parameters;
     uint8_t* master_audio_buffer = params->master_audio_buffer;
     float* filtered_audio_buffer = params->filtered_audio_buffer;
+    float* inference_buffer_a = params->inference_buffer_a;
+    float* inference_buffer_b = params->inference_buffer_b;
+
     EventGroupHandle_t event_group_handle = params->event_group_handle;
 
     while (1)
@@ -71,6 +75,10 @@ void ml_classification_task(void *dsp_ml_parameters)
         
         // TODO: Add different filtering modes?
         // TODO: Classify using MFCC
+        float output[2];
+        heart_inference(filtered_audio_buffer, 80000, output, inference_buffer_a, inference_buffer_b);
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 1: %.2f", output[0]);
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 2: %.2f", output[1]);
 
         xEventGroupSetBits(event_group_handle, ML_CLASSIFICATION_END_BIT);
         xEventGroupClearBits(event_group_handle, ML_CLASSIFICATION_START_BIT);

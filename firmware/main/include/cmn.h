@@ -24,6 +24,9 @@ typedef struct
     adc_continuous_handle_t mic_adc_handle; // Reference Handle to our ADC Mic
     EventGroupHandle_t event_group_handle;  // Reference Handle to our event groups
     LCD_Display_Params lcd_params;          // Parameters for the LCD Dispkay
+
+    float* inference_buffer_a;              // Buffer 1 for heart inference
+    float* inference_buffer_b;              // Buffer 2 for heart inference
 } task_params;
 
 #endif /* CMN_H */
