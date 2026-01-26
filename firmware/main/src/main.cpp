@@ -2,7 +2,7 @@
 #include "drivers/lcd_display.h"
 #include "cmn.h"
 #include "mic_setup.h"
-#include "ble_setup.h"
+#include "ble_streaming_task.h"
 #include "dsp_ml_setup.h"
 #include "lcd_ui_setup.h"
 #include "debug.h"

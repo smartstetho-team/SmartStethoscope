@@ -1,11 +1,13 @@
-import serial
-import wave
 import struct
-import time
-import numpy as np
 import sys as sys
+import time
+import wave
+
+import numpy as np
+import serial
 
 PORT = "COM5"  # adjust if different
+# PORT = "/dev/cu.usbmodem101" # macOS
 BAUD = 921600
 SAMPLE_RATE = 8000
 RECORD_SECONDS = 10
