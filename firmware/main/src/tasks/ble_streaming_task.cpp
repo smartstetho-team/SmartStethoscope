@@ -1,4 +1,4 @@
-#include "ble_streaming_task.h"
+#include "ble_setup.h"
 #include "NimBLEDevice.h"
 #include "esp_log.h"
 #include "cmn.h"
@@ -98,7 +98,7 @@ void ble_streaming_task(void *pvParameters) {
         xEventGroupSetBits(event_group_handle, BLE_STREAMING_END_BIT);
         
         // Clear the start bits so we don't loop infinitely
-        xEventGroupClearBits(event_group_handle, BLE_STREAMING_START_BIT | AUDIO_RECORDING_DONE_BIT);
+        xEventGroupClearBits(event_group_handle, BLE_STREAMING_START_BIT);
         
         vTaskDelay(pdMS_TO_TICKS(100));
     }
