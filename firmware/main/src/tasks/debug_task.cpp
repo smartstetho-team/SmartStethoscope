@@ -32,9 +32,9 @@ static void send_raw_audio(uint8_t* raw_audio_buffer)
 
 static void send_filtered_audio(float* filtered_audio_buffer, float dc_offset)
 {
-    for (size_t i = 0; i < MASTER_AUDIO_BUFFER_SIZE; i += ADC_OUTPUT_LEN)
+    for (size_t i = 0; i < NUM_OF_SAMPLES; i++)
     {
-        float adc_value = filtered_audio_buffer[i/ADC_OUTPUT_LEN];
+        float adc_value = filtered_audio_buffer[i];
         float denormalized_val = (adc_value * 2048.0f) + dc_offset;
 
         if (denormalized_val > 4095.0f) 
