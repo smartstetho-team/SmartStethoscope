@@ -15,6 +15,32 @@ static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 static float state_s1[2] = {0}; 
 static float state_s2[2] = {0};
 
+// static float state_notch[2] = {0};
+// Original SciPy: a1 = -1.997864, a2 = 0.998429
+// ESP-DSP Stable: a1 = 1.997864, a2 = -0.998429
+// static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
+
+// static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
+
+// static float coeffs_s1[5] = {0.037725f, 0.075450f, 0.037725f, -1.394347f, 0.549097f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.966975f, 0.967573f};
+
+// static float coeffs_s1[5] = {0.004067f, 0.008135f, 0.004067f, -1.834586f, 0.852926f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.970018f, 0.970699f};
+
+// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.913178f, 0.933004f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.951878f, 0.959133f};
+
+// static float coeffs_s1[5] = {0.000375f, 0.000750f, 0.000375f, -1.960858f, 0.965904f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977537f, 0.979370f};
+
+// static float coeffs_s1[5] = {0.000727f, 0.001454f, 0.000727f, -1.940787f, 0.945451f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977869f, 0.978576f};
+
+// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.910222f, 0.917972f};
+// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.974132f, 0.974839f};
+
 static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
 static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
 

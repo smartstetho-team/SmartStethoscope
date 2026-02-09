@@ -1,6 +1,7 @@
 dependencies:
   espressif/esp-dsp:
-    component_hash: 42dce32d46ac93dc11f60d368e29a830e9661c7345d794b8a45c343479cae636
+    component_hash: 
+      42dce32d46ac93dc11f60d368e29a830e9661c7345d794b8a45c343479cae636
     dependencies:
     - name: idf
       require: private
@@ -10,7 +11,8 @@ dependencies:
       type: service
     version: 1.7.0
   h2zero/esp-nimble-cpp:
-    component_hash: ecdcabe83333948495103f9d62e4ecb651bff866fce123d00bfc106baa383e54
+    component_hash: 
+      ecdcabe83333948495103f9d62e4ecb651bff866fce123d00bfc106baa383e54
     dependencies:
     - name: espressif/esp_hosted
       registry_url: https://components.espressif.com
@@ -38,7 +40,8 @@ dependencies:
       type: idf
     version: 5.5.0
   lvgl/lvgl:
-    component_hash: 17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
+    component_hash: 
+      17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
     dependencies: []
     source:
       registry_url: https://components.espressif.com/

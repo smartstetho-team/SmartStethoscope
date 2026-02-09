@@ -1,17 +1,14 @@
-
 #ifndef BLE_SETUP_H
 #define BLE_SETUP_H
 
-/* BLE Configuration */
-#include <cstdint>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define SEND_LEN 512
+void ble_streaming_task(void *pvParameters);
 
-typedef struct 
-{
-    uint8_t data[SEND_LEN];
-} ble_packet;
+#ifdef __cplusplus
+}
+#endif
 
-void ble_streaming_task(void *ble_parameters);
-
-#endif /* BLE_SETUP_H */
+#endif
