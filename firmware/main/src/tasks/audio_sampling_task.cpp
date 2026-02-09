@@ -126,20 +126,20 @@ void audio_sampling_task(void *audio_parameters)
 
         int64_t sampling_end = esp_timer_get_time();
 
-        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+        // _lock_acquire(&params->lcd_params.lvgl_api_lock);
 
-        lv_obj_clean(lv_screen_active());
+        // lv_obj_clean(lv_screen_active());
 
-        lv_obj_t *end_label = lv_label_create(lv_screen_active());
-        lv_label_set_text(end_label, "Done Recording.");
-        lv_obj_center(end_label);
+        // lv_obj_t *end_label = lv_label_create(lv_screen_active());
+        // lv_label_set_text(end_label, "Done Recording.");
+        // lv_obj_center(end_label);
         
-        lv_obj_t *end_sub_label = lv_label_create(lv_screen_active());
-        lv_label_set_text(end_sub_label, "Press button to record again.");
-        lv_obj_set_style_text_font(end_sub_label, &lv_font_montserrat_14, 0);
-        lv_obj_align(end_sub_label, LV_ALIGN_CENTER, 0, 60);
+        // lv_obj_t *end_sub_label = lv_label_create(lv_screen_active());
+        // lv_label_set_text(end_sub_label, "Press button to record again.");
+        // lv_obj_set_style_text_font(end_sub_label, &lv_font_montserrat_14, 0);
+        // lv_obj_align(end_sub_label, LV_ALIGN_CENTER, 0, 60);
 
-        _lock_release(&params->lcd_params.lvgl_api_lock);
+        // _lock_release(&params->lcd_params.lvgl_api_lock);
 
         ESP_LOGI(AUDIO_TASK_TAG, "Sampling Time (ms): %d", (uint32_t)((sampling_end-sampling_start)/1000.0f));
         ESP_LOGI(AUDIO_TASK_TAG, "Finished sampling.");

@@ -73,10 +73,10 @@ extern "C" void app_main(void)
     // Allocate space for filtered audio buffer in external RAM
     // Note: Size is halved since we only need ADC value instead of the whole packet
     task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
-                                            (MASTER_AUDIO_BUFFER_SIZE/2 * sizeof(float), MALLOC_CAP_SPIRAM);
+                                            (NUM_OF_SAMPLES * sizeof(float), MALLOC_CAP_SPIRAM);
 
-    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3 * 1024 * 1024, MALLOC_CAP_SPIRAM);
-    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3 * 1024 * 1024, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
 
     if (task_parameters.master_audio_buffer == nullptr || 
         task_parameters.filtered_audio_buffer == nullptr ||
@@ -101,7 +101,7 @@ extern "C" void app_main(void)
     xTaskCreate(ble_streaming_task, "ble_streaming_task", 8192, 
                 (void*)&task_parameters, 4, &ble_streaming_task_handle);
 
-    xTaskCreate(ml_classification_task, "ml_classification_task", 12288, 
+    xTaskCreate(ml_classification_task, "ml_classification_task", 32768, 
                 (void*)&task_parameters, 4, &ml_classification_task_handle);
 
     xTaskCreate(lcd_ui_task, "lcd_ui_task", 10240, 
