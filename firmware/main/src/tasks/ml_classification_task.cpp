@@ -83,72 +83,93 @@ void ml_classification_task(void *dsp_ml_parameters)
 
         // Status Label
         lv_obj_t *proc_label = lv_label_create(active_scr);
-        lv_label_set_text(proc_label, "Filtering Audio..."); // Initial stage text
+        lv_label_set_text(proc_label, "Filtering Audio...");
         lv_obj_set_style_text_font(proc_label, &lv_font_montserrat_22, 0); 
-        lv_obj_set_style_text_color(proc_label, lv_color_hex(0x000000), 0);
-        lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, -50);
+        lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, -60);
 
         // Progress Bar
         lv_obj_t *bar = lv_bar_create(active_scr);
-        lv_obj_set_size(bar, 220, 15);
-        lv_obj_center(bar);
-        lv_obj_set_style_bg_color(bar, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(bar, lv_palette_main(LV_PALETTE_CYAN), LV_PART_INDICATOR);
-        
-        // Start bar at 20%
+        lv_obj_set_size(bar, 200, 12);
+        lv_obj_align(bar, LV_ALIGN_CENTER, 0, -20);
         lv_bar_set_value(bar, 20, LV_ANIM_OFF);
+
+        // Pulsing Heart
+        lv_obj_t *heart = lv_label_create(active_scr);
+        lv_label_set_text(heart, LV_SYMBOL_VOLUME_MID);
+        lv_obj_set_style_text_color(heart, lv_palette_main(LV_PALETTE_RED), 0);
+        lv_obj_set_style_text_font(heart, &lv_font_montserrat_30, 0); // Large and visible
+        lv_obj_align(heart, LV_ALIGN_CENTER, 0, 50);
+
+        // "Lub-Dub" Heartbeat Animation
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, heart);
+        lv_anim_set_values(&a, 256, 380);       // 256 = 100% scale
+        lv_anim_set_time(&a, 200);             // Quick "Thump"
+        lv_anim_set_playback_time(&a, 400);    // Gentle return
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
         
+        // Create a more organic, bouncy "thump"
+        lv_anim_set_path_cb(&a, lv_anim_path_overshoot); 
+        
+        lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+            lv_obj_set_style_transform_scale((lv_obj_t *)var, v, 0);
+        });
+        lv_anim_start(&a);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
         // --- STEP 1: FILTERING (20% -> 40%) ---
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
-        vTaskDelay(pdMS_TO_TICKS(500));
-
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Audio filtering complete.");
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 40, LV_ANIM_ON);
         lv_label_set_text(proc_label, "Analyzing...");
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 2: INFERENCE (40% -> 90%) --
+        // --- STEP 2: INFERENCE (40% -> 90%) ---
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
                                        output, inference_buffer_a, inference_buffer_b);
-            
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 1: %.2f", output[0]);
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 2: %.2f", output[1]);
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 90, LV_ANIM_ON);
         lv_label_set_text(proc_label, "Finalizing...");
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 3: RESULT (100%) ---
         vTaskDelay(pdMS_TO_TICKS(500));
 
+        // --- STEP 3: RESULT & CLEANUP ---
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
-        lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN); 
-         
-        if (output[1] > 0.76) 
+        lv_obj_clean(active_scr); // Automatically stops the heart animation
+        
+        if (output[1] > MURMUR_THRESHOLD)
         {
-            lv_obj_clean(lv_screen_active());
+            lv_obj_t *err_icon = lv_label_create(active_scr);
+            lv_label_set_text(err_icon, LV_SYMBOL_WARNING);
+            lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
 
-            lv_obj_t *end_label = lv_label_create(lv_screen_active());
+            lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Abnormal");
-            lv_obj_center(end_label);
+            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
+            lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
             
-            lv_obj_t *end_sub_label = lv_label_create(lv_screen_active());
-            lv_label_set_text(end_sub_label, "Check CardioScope App");
-            lv_obj_set_style_text_font(end_sub_label, &lv_font_montserrat_14, 0);
-            lv_obj_align(end_sub_label, LV_ALIGN_CENTER, 0, 60);
-        }
+            lv_obj_t *end_sub = lv_label_create(active_scr);
+            lv_label_set_text(end_sub, "Check CardioScope App");
+            lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
+        } 
         else 
         {
-            lv_label_set_text(proc_label, "Normal");
+            lv_obj_t *ok_icon = lv_label_create(active_scr);
+            lv_label_set_text(ok_icon, LV_SYMBOL_OK);
+            lv_obj_set_style_text_font(ok_icon, &lv_font_montserrat_22, 0);
+            lv_obj_align(ok_icon, LV_ALIGN_CENTER, 0, -50);
+
+            lv_obj_t *end_label = lv_label_create(active_scr);
+            lv_label_set_text(end_label, "Normal");
+            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_22, 0);
+            lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
         }
-        lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, 0); 
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
         xEventGroupSetBits(event_group_handle, ML_CLASSIFICATION_END_BIT);

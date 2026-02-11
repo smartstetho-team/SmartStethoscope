@@ -3,6 +3,8 @@
 
 /* DSP+MFCC+ML Configuration */
 
+#define MURMUR_THRESHOLD 0.76
+
 void ml_classification_task(void *dsp_ml_parameters);
 
 #endif /* DSP_ML_SETUP_H */
