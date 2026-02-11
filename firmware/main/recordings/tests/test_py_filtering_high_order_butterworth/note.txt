@@ -1,1 +1,0 @@
-heart = butter_bandpass(data, fs, 30, 80, order=4)

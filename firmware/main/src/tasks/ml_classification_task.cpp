@@ -1,11 +1,13 @@
 #include "dsp_ml_setup.h"
 #include "mic_setup.h"
+#include "heart_inference.h"
 
 #include "cmn.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_dsp.h"
+#include "lvgl.h"
 
 static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 
@@ -18,27 +20,6 @@ static float state_s2[2] = {0};
 // ESP-DSP Stable: a1 = 1.997864, a2 = -0.998429
 // static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
 
-// static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
-
-// static float coeffs_s1[5] = {0.037725f, 0.075450f, 0.037725f, -1.394347f, 0.549097f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.966975f, 0.967573f};
-
-// static float coeffs_s1[5] = {0.004067f, 0.008135f, 0.004067f, -1.834586f, 0.852926f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.970018f, 0.970699f};
-
-// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.913178f, 0.933004f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.951878f, 0.959133f};
-
-// static float coeffs_s1[5] = {0.000375f, 0.000750f, 0.000375f, -1.960858f, 0.965904f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977537f, 0.979370f};
-
-// static float coeffs_s1[5] = {0.000727f, 0.001454f, 0.000727f, -1.940787f, 0.945451f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977869f, 0.978576f};
-
-// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.910222f, 0.917972f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.974132f, 0.974839f};
-
 static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
 static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
 
@@ -49,6 +30,9 @@ void ml_classification_task(void *dsp_ml_parameters)
     task_params* params = (task_params*)dsp_ml_parameters;
     uint8_t* master_audio_buffer = params->master_audio_buffer;
     float* filtered_audio_buffer = params->filtered_audio_buffer;
+    float* inference_buffer_a = params->inference_buffer_a;
+    float* inference_buffer_b = params->inference_buffer_b;
+
     EventGroupHandle_t event_group_handle = params->event_group_handle;
 
     while (1)
@@ -92,16 +76,101 @@ void ml_classification_task(void *dsp_ml_parameters)
             filtered_audio_buffer[i/ADC_OUTPUT_LEN] = normalized_val;
         }
 
-        // dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_notch, state_notch);
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
 
-        // Apply bandpass filter to get frequencies between 30-150 Hz
+        lv_obj_t * active_scr = lv_screen_active();
+        lv_obj_clean(active_scr);
+
+        // Status Label
+        lv_obj_t *proc_label = lv_label_create(active_scr);
+        lv_label_set_text(proc_label, "Filtering Audio...");
+        lv_obj_set_style_text_font(proc_label, &lv_font_montserrat_22, 0); 
+        lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, -60);
+
+        // Progress Bar
+        lv_obj_t *bar = lv_bar_create(active_scr);
+        lv_obj_set_size(bar, 200, 12);
+        lv_obj_align(bar, LV_ALIGN_CENTER, 0, -20);
+        lv_bar_set_value(bar, 20, LV_ANIM_OFF);
+
+        // Pulsing Heart
+        lv_obj_t *heart = lv_label_create(active_scr);
+        lv_label_set_text(heart, LV_SYMBOL_VOLUME_MID);
+        lv_obj_set_style_text_color(heart, lv_palette_main(LV_PALETTE_RED), 0);
+        lv_obj_set_style_text_font(heart, &lv_font_montserrat_30, 0); // Large and visible
+        lv_obj_align(heart, LV_ALIGN_CENTER, 0, 50);
+
+        // "Lub-Dub" Heartbeat Animation
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, heart);
+        lv_anim_set_values(&a, 256, 380);       // 256 = 100% scale
+        lv_anim_set_time(&a, 200);             // Quick "Thump"
+        lv_anim_set_playback_time(&a, 400);    // Gentle return
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        
+        // Create a more organic, bouncy "thump"
+        lv_anim_set_path_cb(&a, lv_anim_path_overshoot); 
+        
+        lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+            lv_obj_set_style_transform_scale((lv_obj_t *)var, v, 0);
+        });
+        lv_anim_start(&a);
+        _lock_release(&params->lcd_params.lvgl_api_lock);
+
+        // --- STEP 1: FILTERING (20% -> 40%) ---
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
 
-        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Audio filtering complete.");
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+        lv_bar_set_value(bar, 40, LV_ANIM_ON);
+        lv_label_set_text(proc_label, "Analyzing...");
+        _lock_release(&params->lcd_params.lvgl_api_lock);
+
+        // --- STEP 2: INFERENCE (40% -> 90%) ---
+        float output[2];
+        heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
+                                       output, inference_buffer_a, inference_buffer_b);
+
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+        lv_bar_set_value(bar, 90, LV_ANIM_ON);
+        lv_label_set_text(proc_label, "Finalizing...");
+        _lock_release(&params->lcd_params.lvgl_api_lock);
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        // --- STEP 3: RESULT & CLEANUP ---
+        _lock_acquire(&params->lcd_params.lvgl_api_lock);
+        lv_obj_clean(active_scr); // Automatically stops the heart animation
         
-        // TODO: Add different filtering modes?
-        // TODO: Classify using MFCC
+        if (output[1] > MURMUR_THRESHOLD)
+        {
+            lv_obj_t *err_icon = lv_label_create(active_scr);
+            lv_label_set_text(err_icon, LV_SYMBOL_WARNING);
+            lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
+
+            lv_obj_t *end_label = lv_label_create(active_scr);
+            lv_label_set_text(end_label, "Abnormal");
+            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
+            lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
+            
+            lv_obj_t *end_sub = lv_label_create(active_scr);
+            lv_label_set_text(end_sub, "Check CardioScope App");
+            lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
+        } 
+        else 
+        {
+            lv_obj_t *ok_icon = lv_label_create(active_scr);
+            lv_label_set_text(ok_icon, LV_SYMBOL_OK);
+            lv_obj_set_style_text_font(ok_icon, &lv_font_montserrat_22, 0);
+            lv_obj_align(ok_icon, LV_ALIGN_CENTER, 0, -50);
+
+            lv_obj_t *end_label = lv_label_create(active_scr);
+            lv_label_set_text(end_label, "Normal");
+            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_22, 0);
+            lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
+        }
+        _lock_release(&params->lcd_params.lvgl_api_lock);
 
         xEventGroupSetBits(event_group_handle, ML_CLASSIFICATION_END_BIT);
         xEventGroupClearBits(event_group_handle, ML_CLASSIFICATION_START_BIT);

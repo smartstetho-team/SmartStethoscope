@@ -4,59 +4,15 @@
 #include "cmn.h"
 #include "mic_setup.h"
 
-static const char* TAG = "BLE_STREAMING";
-
-// Characteristics need to be accessible inside the loop
-static NimBLECharacteristic* pHeartChar = nullptr;
-static NimBLECharacteristic* pAudioDataChar = nullptr; 
-static NimBLECharacteristic* pBatteryChar = nullptr;
-
-#define SERVICE_UUID_STETHO      "0000abcd-0000-1000-8000-00805f9b34fb"
-#define CHAR_UUID_AUDIO_DATA     "00001234-0000-1000-8000-00805f9b34fb"
-
-class MyServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
-        ESP_LOGI(TAG, "iPhone Connected!");
-    };
-    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
-        ESP_LOGI(TAG, "Disconnected. Restarting Advertising...");
-        NimBLEDevice::startAdvertising();
-    }
-};
+static const char* BLE_STREAMING_TASK_TAG = "BLE_STREAMING_TASK";
 
 void ble_streaming_task(void *pvParameters) {
     task_params* params = (task_params*)pvParameters;
     EventGroupHandle_t event_group_handle = params->event_group_handle;
     uint8_t* master_audio_buffer = params->master_audio_buffer;
+    NimBLECharacteristic* pAudioDataChar = params->pAudioDataChar;
 
-    // --- ONE-TIME SETUP (Outside the loop) ---
-    NimBLEDevice::init("SmartStetho-S3");
-    NimBLEDevice::setMTU(512); 
-
-    NimBLEServer* pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-
-    // Services
-    NimBLEService* pBatteryService = pServer->createService("180f");
-    pBatteryChar = pBatteryService->createCharacteristic("2a19", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-    pBatteryService->start();
-
-    NimBLEService* pHeartService = pServer->createService("180d");
-    pHeartChar = pHeartService->createCharacteristic("2a37", NIMBLE_PROPERTY::NOTIFY);
-    pHeartService->start();
-
-    NimBLEService* pStethoService = pServer->createService(SERVICE_UUID_STETHO);
-    pAudioDataChar = pStethoService->createCharacteristic(CHAR_UUID_AUDIO_DATA, NIMBLE_PROPERTY::NOTIFY);
-    pStethoService->start();
-
-    // Advertising
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID("180d");
-    pAdvertising->addServiceUUID(SERVICE_UUID_STETHO); 
-    pAdvertising->setName("SmartStetho-S3");
-    pAdvertising->start();
-
-    ESP_LOGI(TAG, "BLE initialized. Waiting for recording bits...");
+    ESP_LOGI(BLE_STREAMING_TASK_TAG, "Starting BLE streaming task");
 
     while (1) {
         // Wait for BOTH the recording to be done AND the streaming request to be active
@@ -66,8 +22,7 @@ void ble_streaming_task(void *pvParameters) {
                             pdTRUE,  // Wait for both
                             portMAX_DELAY);
 
-        // --- TODO: PUT CODE HERE ---
-        ESP_LOGI(TAG, "Bursting audio to iPhone...");
+        ESP_LOGI(BLE_STREAMING_TASK_TAG, "Bursting audio to iPhone...");
 
         size_t total_size = MASTER_AUDIO_BUFFER_SIZE;
         size_t sent_bytes = 0;
@@ -91,7 +46,7 @@ void ble_streaming_task(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(12)); 
         }
 
-        ESP_LOGI(TAG, "Transfer finished successfully.");
+        ESP_LOGI(BLE_STREAMING_TASK_TAG, "Transfer finished successfully.");
 
         // --- CLEANUP ---
         // Signal that we are done so the record task can take over again
