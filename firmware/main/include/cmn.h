@@ -4,6 +4,7 @@
 #include "esp_adc/adc_continuous.h"
 #include "freertos/FreeRTOS.h"
 #include "drivers/lcd_display.h"
+#include "NimBLEDevice.h"
 
 // Event group bits
 #define AUDIO_RECORDING_START_BIT      (1 << 0)
@@ -18,15 +19,19 @@
 // Parameters to be used between tasks
 typedef struct
 {
-    uint8_t* master_audio_buffer;           // Buffer containing raw audio data
-    float* filtered_audio_buffer;           // Buffer containing filtered audio data
-    float audio_dc_offset;                  // Calculated DC offset from raw audio data
-    adc_continuous_handle_t mic_adc_handle; // Reference Handle to our ADC Mic
-    EventGroupHandle_t event_group_handle;  // Reference Handle to our event groups
-    LCD_Display_Params lcd_params;          // Parameters for the LCD Dispkay
+    uint8_t* master_audio_buffer;               // Buffer containing raw audio data
+    float* filtered_audio_buffer;               // Buffer containing filtered audio data
+    float audio_dc_offset;                      // Calculated DC offset from raw audio data
+    adc_continuous_handle_t mic_adc_handle;     // Reference Handle to our ADC Mic
+    EventGroupHandle_t event_group_handle;      // Reference Handle to our event groups
+    LCD_Display_Params lcd_params;              // Parameters for the LCD Dispkay
 
-    float* inference_buffer_a;              // Buffer 1 for heart inference
-    float* inference_buffer_b;              // Buffer 2 for heart inference
+    float* inference_buffer_a;                  // Buffer 1 for heart inference
+    float* inference_buffer_b;                  // Buffer 2 for heart inference
+
+    NimBLECharacteristic* pHeartChar;           // BLE handle for heart data
+    NimBLECharacteristic* pAudioDataChar;       // BLE Handle for audio data
+    NimBLECharacteristic* pBatteryChar;         // BLE Handle for battery data
 } task_params;
 
 #endif /* CMN_H */

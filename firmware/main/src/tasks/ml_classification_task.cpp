@@ -20,27 +20,6 @@ static float state_s2[2] = {0};
 // ESP-DSP Stable: a1 = 1.997864, a2 = -0.998429
 // static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
 
-// static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
-
-// static float coeffs_s1[5] = {0.037725f, 0.075450f, 0.037725f, -1.394347f, 0.549097f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.966975f, 0.967573f};
-
-// static float coeffs_s1[5] = {0.004067f, 0.008135f, 0.004067f, -1.834586f, 0.852926f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.970018f, 0.970699f};
-
-// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.913178f, 0.933004f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.951878f, 0.959133f};
-
-// static float coeffs_s1[5] = {0.000375f, 0.000750f, 0.000375f, -1.960858f, 0.965904f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977537f, 0.979370f};
-
-// static float coeffs_s1[5] = {0.000727f, 0.001454f, 0.000727f, -1.940787f, 0.945451f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.977869f, 0.978576f};
-
-// static float coeffs_s1[5] = {0.001460f, 0.002921f, 0.001460f, -1.910222f, 0.917972f};
-// static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.974132f, 0.974839f};
-
 static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
 static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
 
@@ -97,58 +76,49 @@ void ml_classification_task(void *dsp_ml_parameters)
             filtered_audio_buffer[i/ADC_OUTPUT_LEN] = normalized_val;
         }
 
-        // // Apply bandpass filter to get frequencies between 30-150 Hz
-        // dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
-        // dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
-
-        // ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Audio filtering complete.");
-        
-        // float output[2];
-        // heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
-        // output, inference_buffer_a, inference_buffer_b );
-
-        // // heart_inference(filtered_audio_buffer, 80000, output, inference_buffer_a, inference_buffer_b);
-        // ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 1: %.2f", output[0]);
-        // ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 2: %.2f", output[1]);
-
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
 
         lv_obj_t * active_scr = lv_screen_active();
         lv_obj_clean(active_scr);
 
-        // 1. Status Label
+        // Status Label
         lv_obj_t *proc_label = lv_label_create(active_scr);
         lv_label_set_text(proc_label, "Filtering Audio..."); // Initial stage text
         lv_obj_set_style_text_font(proc_label, &lv_font_montserrat_22, 0); 
         lv_obj_set_style_text_color(proc_label, lv_color_hex(0x000000), 0);
         lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, -50);
 
-        // 2. Progress Bar
+        // Progress Bar
         lv_obj_t *bar = lv_bar_create(active_scr);
         lv_obj_set_size(bar, 220, 15);
         lv_obj_center(bar);
         lv_obj_set_style_bg_color(bar, lv_color_hex(0x1A1A1A), LV_PART_MAIN);
         lv_obj_set_style_bg_color(bar, lv_palette_main(LV_PALETTE_CYAN), LV_PART_INDICATOR);
         
-        // Start at 0
-        lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+        // Start bar at 20%
+        lv_bar_set_value(bar, 20, LV_ANIM_OFF);
         
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 1: FILTERING (0% -> 20%) ---
+        // --- STEP 1: FILTERING (20% -> 40%) ---
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Audio filtering complete.");
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
-        lv_bar_set_value(bar, 20, LV_ANIM_ON);
-        lv_label_set_text(proc_label, "Extracting...");
+        lv_bar_set_value(bar, 40, LV_ANIM_ON);
+        lv_label_set_text(proc_label, "Analyzing...");
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 2: INFERENCE (20% -> 90%) ---
-        // This is the "Minute-Long" part. 
+        // --- STEP 2: INFERENCE (40% -> 90%) --
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
                                        output, inference_buffer_a, inference_buffer_b);
+            
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 1: %.2f", output[0]);
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Output 2: %.2f", output[1]);
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 90, LV_ANIM_ON);
@@ -156,14 +126,26 @@ void ml_classification_task(void *dsp_ml_parameters)
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
         // --- STEP 3: RESULT (100%) ---
-        vTaskDelay(pdMS_TO_TICKS(500)); // Small pause to let the user see "Finalizing"
+        vTaskDelay(pdMS_TO_TICKS(500));
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN); 
-        
-        if (output[1] > output[0]) {
-            lv_label_set_text(proc_label, "Abnormal");
-        } else {
+         
+        if (output[1] > 0.76) 
+        {
+            lv_obj_clean(lv_screen_active());
+
+            lv_obj_t *end_label = lv_label_create(lv_screen_active());
+            lv_label_set_text(end_label, "Abnormal");
+            lv_obj_center(end_label);
+            
+            lv_obj_t *end_sub_label = lv_label_create(lv_screen_active());
+            lv_label_set_text(end_sub_label, "Check CardioScope App");
+            lv_obj_set_style_text_font(end_sub_label, &lv_font_montserrat_14, 0);
+            lv_obj_align(end_sub_label, LV_ALIGN_CENTER, 0, 60);
+        }
+        else 
+        {
             lv_label_set_text(proc_label, "Normal");
         }
         lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, 0); 
