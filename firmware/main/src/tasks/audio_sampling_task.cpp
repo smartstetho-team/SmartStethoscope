@@ -94,7 +94,7 @@ void audio_sampling_task(void *audio_parameters)
         while (total_bytes_read < bytes_needed) 
         {
             // Read from the DMA buffer
-            esp_err_t err = adc_continuous_read(handle, read_buffer, READ_LEN, &bytes_read, 100);
+            esp_err_t err = adc_continuous_read(handle, read_buffer, READ_LEN, &bytes_read, ADC_READ_TIMEOUT_MS);
 
             if (err == ESP_OK) 
             {

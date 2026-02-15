@@ -150,7 +150,8 @@ extern "C" void app_main(void)
 
     BaseType_t rslt = xTaskCreatePinnedToCore(ml_classification_task, "ml_classification_task", 10240, 
                                             (void*)&task_parameters, 5, &ml_classification_task_handle, 1);
-    if (rslt != pdPASS) {
+    if (rslt != pdPASS) 
+    {
         ESP_LOGE(MAIN_TAG, "Failed to create ML Task! Error code: %d", rslt);
     }
 
