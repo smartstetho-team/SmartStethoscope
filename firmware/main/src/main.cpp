@@ -1,5 +1,6 @@
 #include "drivers/button.h"
 #include "drivers/lcd_display.h"
+#include "drivers/power_mgmt.h"
 #include "cmn.h"
 #include "mic_setup.h"
 #include "ble_setup.h"
@@ -166,4 +167,7 @@ extern "C" void app_main(void)
 
     // Set up button for the audio task
     configure_push_button(audio_sampling_task_handle, (void*)&task_parameters);
+    
+    // Set up low power detection (let the lcd task handle this)
+    configure_lbo_pin(lcd_ui_task_handle, (void*)&task_parameters);
 }

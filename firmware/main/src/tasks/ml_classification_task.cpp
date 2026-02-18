@@ -156,10 +156,10 @@ void ml_classification_task(void *dsp_ml_parameters)
         }
 
         // 3. Final Conversion
-        float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ; // Should be 8.0
+        float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
         int final_bpm = (int)(beat_count * (60.0f / total_seconds));
 
-        ESP_LOGI("BPM", "Beats found in 8s: %d | Extrapolated BPM: %d", beat_count, final_bpm);
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Calculated BPM: %d", final_bpm);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
 
