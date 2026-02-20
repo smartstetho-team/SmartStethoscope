@@ -90,13 +90,22 @@ extern "C" void app_main(void)
     task_parameters.master_audio_buffer = (uint8_t*)heap_caps_malloc
                                           (MASTER_AUDIO_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
 
+    ESP_LOGE(MAIN_TAG, "First Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
     // Allocate space for filtered audio buffer in external RAM
     // Note: Size is halved since we only need ADC value instead of the whole packet
     task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
                                             (NUM_OF_SAMPLES * sizeof(float), MALLOC_CAP_SPIRAM);
 
-    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
-    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
+    ESP_LOGE(MAIN_TAG, "Second Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
+
+    ESP_LOGE(MAIN_TAG, "Third Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
+
+    ESP_LOGE(MAIN_TAG, "Fourth Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
     if (task_parameters.master_audio_buffer == NULL || 
         task_parameters.filtered_audio_buffer == NULL ||
