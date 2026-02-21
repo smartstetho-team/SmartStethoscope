@@ -17,7 +17,7 @@
 // 3000 hz and 8 secs -> good for bpm and somewhat murmur accuracy if there is noise
 // 4000 hz and 6 secs -> ok for bpm, but good for murmur accuracy
 #define SAMPLE_FREQ_HZ      4000             // 4kHz sampling rate (250us between each sample)
-#define AUDIO_LENGTH        10               // Recorded audio length in seconds
+#define AUDIO_LENGTH        8               // Recorded audio length in seconds
 #define READ_LEN            1024             // Bytes to read per DMA block
 #define NUM_OF_SAMPLES      (SAMPLE_FREQ_HZ * AUDIO_LENGTH) // Number of samples
 #define MASTER_AUDIO_BUFFER_SIZE (SAMPLE_FREQ_HZ * AUDIO_LENGTH * ADC_OUTPUT_LEN) // Size of master audio buffer (may need offset to prevent overflow)
