@@ -62,7 +62,7 @@ void ml_classification_task(void *dsp_ml_parameters)
             uint16_t adc_val = (uint16_t)sample->type2.data;
 
             float centered_val = (float)adc_val - params->audio_dc_offset;
-            float normalized_val = centered_val/2048.0f;
+            float normalized_val = (centered_val/2048.0f) * DIGITAL_GAIN;
 
             if (normalized_val > 1.0f)
             {
@@ -104,7 +104,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_anim_t a;
         lv_anim_init(&a);
         lv_anim_set_var(&a, heart);
-        lv_anim_set_values(&a, 256, 380);       // 256 = 100% scale
+        lv_anim_set_values(&a, 256, 380);      // 256 = 100% scale
         lv_anim_set_time(&a, 200);             // Quick "Thump"
         lv_anim_set_playback_time(&a, 400);    // Gentle return
         lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
@@ -121,6 +121,47 @@ void ml_classification_task(void *dsp_ml_parameters)
         // --- STEP 1: FILTERING (20% -> 40%) ---
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
+
+        // Calculate BPM metric
+        // 1. Dynamic Thresholding
+        float max_peak = 0;
+        for (int i = 0; i < NUM_OF_SAMPLES; i++) 
+        {
+            if (abs(filtered_audio_buffer[i]) > max_peak) 
+            {
+                max_peak = abs(filtered_audio_buffer[i]);
+            }
+        }
+
+        // Set threshold at 65% of max to catch S1 but ignore background hiss
+        float threshold = max_peak * 0.65f; 
+        int beat_count = 0;
+
+        // 2. Refractory Period (Cooldown)
+        // A human heart won't beat faster than 220 BPM (~270ms per beat).
+        // We'll ignore everything for 300ms after a peak to skip the S2 "Dub".
+        int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
+        int last_beat_index = -refractory_samples; 
+
+        for (int i = 0; i < NUM_OF_SAMPLES; i++) 
+        {
+            float current_val = abs(filtered_audio_buffer[i]);
+
+            // Trigger if: Signal > Threshold AND we are outside the cooldown window
+            if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
+            {
+                beat_count++;
+                last_beat_index = i; // Reset cooldown
+            }
+        }
+
+        // 3. Final Conversion
+        float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
+        int final_bpm = (int)(beat_count * (60.0f / total_seconds));
+
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Calculated BPM: %d", final_bpm);
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 40, LV_ANIM_ON);
@@ -153,22 +194,29 @@ void ml_classification_task(void *dsp_ml_parameters)
             lv_label_set_text(end_label, "Abnormal");
             lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
+
+            lv_obj_t *end_sub1 = lv_label_create(active_scr);
+            lv_label_set_text(end_sub1, "BPM: --");
+            lv_obj_align(end_sub1, LV_ALIGN_CENTER, 0, 45);
             
-            lv_obj_t *end_sub = lv_label_create(active_scr);
-            lv_label_set_text(end_sub, "Check CardioScope App");
-            lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
+            lv_obj_t *end_sub2 = lv_label_create(active_scr);
+            lv_label_set_text(end_sub2, "Check CardioScope App");
+            lv_obj_align(end_sub2, LV_ALIGN_CENTER, 0, 75);
         } 
         else 
         {
             lv_obj_t *ok_icon = lv_label_create(active_scr);
             lv_label_set_text(ok_icon, LV_SYMBOL_OK);
-            lv_obj_set_style_text_font(ok_icon, &lv_font_montserrat_22, 0);
             lv_obj_align(ok_icon, LV_ALIGN_CENTER, 0, -50);
 
             lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Normal");
-            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_22, 0);
+            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
+
+            lv_obj_t *end_sub = lv_label_create(active_scr);
+            lv_label_set_text_fmt(end_sub, "BPM: %d", final_bpm);
+            lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
 

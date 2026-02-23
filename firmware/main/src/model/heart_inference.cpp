@@ -89,11 +89,7 @@ void conv1d_int8(
     out_length = (in_length + 2 * padding - kernel_size) / stride + 1;
 
     int total_elements = out_channels * out_length;
-    if (total_elements > 400000) {
-        ESP_LOGE("AI", "CRITICAL: Output buffer too small! Need %d, have 400000", total_elements);
-        return; // Stop the layer from running
-    }
-    
+
     for (int oc = 0; oc < out_channels; ++oc) {
         if (oc % 4 == 0) {
             YIELD();

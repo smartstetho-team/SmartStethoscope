@@ -9,11 +9,15 @@
 #define ADC_ATTENUATION     ADC_ATTEN_DB_12   // 0-3.3V range
 #define ADC_BITWIDTH        ADC_BITWIDTH_12
 #define ADC_OUTPUT_LEN      4                // Continuous mode Type 2 format provides 4 bytes per sample
+#define ADC_READ_TIMEOUT_MS    200           
 
 /* VALUES SUBJECT TO CHANGE */
-// BEST RIGHT NOW. 8000 Hz and 3 secs.
-#define SAMPLE_FREQ_HZ      5000             // 8kHz sampling rate (125us between each sample)
-#define AUDIO_LENGTH        5               // Recorded audio length in seconds
+// BEST RIGHT NOW. 8000 Hz and 3 secs. Before ML, it was 8000 Hz and 10 secs.
+// 5000 hz and 5 secs
+// 3000 hz and 8 secs -> good for bpm and somewhat murmur accuracy if there is noise
+// 4000 hz and 6 secs -> ok for bpm, but good for murmur accuracy
+#define SAMPLE_FREQ_HZ      4000             // 4kHz sampling rate (250us between each sample)
+#define AUDIO_LENGTH        8               // Recorded audio length in seconds
 #define READ_LEN            1024             // Bytes to read per DMA block
 #define NUM_OF_SAMPLES      (SAMPLE_FREQ_HZ * AUDIO_LENGTH) // Number of samples
 #define MASTER_AUDIO_BUFFER_SIZE (SAMPLE_FREQ_HZ * AUDIO_LENGTH * ADC_OUTPUT_LEN) // Size of master audio buffer (may need offset to prevent overflow)

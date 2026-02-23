@@ -1,5 +1,6 @@
 #include "drivers/button.h"
 #include "drivers/lcd_display.h"
+#include "drivers/power_mgmt.h"
 #include "cmn.h"
 #include "mic_setup.h"
 #include "ble_setup.h"
@@ -94,8 +95,8 @@ extern "C" void app_main(void)
     task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
                                             (NUM_OF_SAMPLES * sizeof(float), MALLOC_CAP_SPIRAM);
 
-    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
-    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(1700000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
 
     if (task_parameters.master_audio_buffer == NULL || 
         task_parameters.filtered_audio_buffer == NULL ||
@@ -150,7 +151,8 @@ extern "C" void app_main(void)
 
     BaseType_t rslt = xTaskCreatePinnedToCore(ml_classification_task, "ml_classification_task", 10240, 
                                             (void*)&task_parameters, 5, &ml_classification_task_handle, 1);
-    if (rslt != pdPASS) {
+    if (rslt != pdPASS) 
+    {
         ESP_LOGE(MAIN_TAG, "Failed to create ML Task! Error code: %d", rslt);
     }
 
@@ -165,4 +167,7 @@ extern "C" void app_main(void)
 
     // Set up button for the audio task
     configure_push_button(audio_sampling_task_handle, (void*)&task_parameters);
+    
+    // Set up low power detection (let the lcd task handle this)
+    configure_lbo_pin(lcd_ui_task_handle, (void*)&task_parameters);
 }
