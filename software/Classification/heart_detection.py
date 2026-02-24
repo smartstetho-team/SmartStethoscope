@@ -1,8 +1,5 @@
 """
-Eko-style ResNet for Heart Murmur Detection
-Finds best threshold using youden thresholding
-
-Based on: "Screening of heart murmur in adults via digital stethoscope"
+ResNet CNN Model Architecture for Heart Murmur Detection
 """
 
 import os
@@ -25,7 +22,6 @@ import matplotlib.pyplot as plt
 
 
 ## Preprocessing
-
 def butter_highpass(cutoff, fs, order=8):
     """8th-order Butterworth high-pass filter at 30 Hz"""
     nyq = 0.5 * fs
@@ -77,7 +73,6 @@ def load_and_preprocess_wav(file_path, target_fs=2000, max_length=30.0):
 
 
 ## Data Augmentation
-
 class AudioAugmentation:
     """Audio augmentations for minority class (murmur class)"""
 
@@ -104,9 +99,8 @@ class AudioAugmentation:
 
 
 ## Dataset
-
 class CirCorMurmurDataset(Dataset):
-     """
+    """
     Dataset for the CirCor heart sound dataset with
     data augmentation and class imbalance handling.
     """
@@ -115,7 +109,7 @@ class CirCorMurmurDataset(Dataset):
                  ausc_locations=['AV', 'PV', 'TV', 'MV', 'Phc'],
                  target_fs=2000, max_length=30.0,
                  augment=False, augment_minority_only=True):
-      
+
         # Root directory containing .txt metadata and .wav files
         self.data_dir = Path(data_dir)
 
@@ -201,7 +195,7 @@ class CirCorMurmurDataset(Dataset):
     # Dataset length
     def __len__(self):
         return len(self.files)
-    
+
     # Get a single sample (audio and label)
     def __getitem__(self, idx):
         wav_path = self.files[idx]
@@ -249,7 +243,7 @@ def collate_fn(batch):
 
     # Determine max temporal length in the batch
     max_length = max([d.shape[1] for d in data_list])
-    
+
     padded_data = []
     for data in data_list:
         if data.shape[1] < max_length:
@@ -261,7 +255,6 @@ def collate_fn(batch):
 
 
 ## Model
-
 class EkoResNet34(nn.Module):
     """34-layer ResNet matching Eko paper"""
 
@@ -289,7 +282,7 @@ class EkoResNet34(nn.Module):
         self.stage3 = self._make_stage(64, 128, 7, dropout, pools_at=[0, 4])
         self.stage4 = self._make_stage(128, 256, 7, dropout, pools_at=[0, 4])
         self.stage5 = self._make_stage(256, 256, 6, dropout, pools_at=[0, 3])
-        
+
         # Global average pooling collapses the time dimension to length 1
         self.global_pool = nn.AdaptiveAvgPool1d(1)
 
@@ -344,10 +337,7 @@ class EkoResNet34(nn.Module):
         out = self.fc(out)
         return out
 
-
-
-# THRESHOLD TUNING
-
+# Threshold Tuning
 class ThresholdTuner:
     """
     Find optimal decision threshold for balancing sensitivity and specificity.
@@ -365,7 +355,7 @@ class ThresholdTuner:
         self.auc = roc_auc_score(self.labels, self.probs)
 
     def get_metrics_at_threshold(self, threshold):
-         """
+        """
         Compute performance metrics for a given threshold
 
         Args:
@@ -591,8 +581,7 @@ class ThresholdTuner:
         print(f"\nPlot saved to: {save_path}")
 
 
-# Training
-
+## Training
 def compute_class_weights(labels, weight_ratio=None):
     """
     Compute class weights for handling class imbalance
@@ -652,7 +641,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
 
 
 def validate(model, val_loader, criterion, device):
-     """
+    """
     Run validation loop
 
     Returns:
@@ -716,7 +705,7 @@ def compute_metrics_at_threshold(labels, probs, threshold=0.5):
 
 def train_model(model, train_loader, val_loader, epochs=50, lr=1e-3, device='cuda',
                 save_path='best_model.pth', class_weights=None):
-      """
+    """
     Full training loop with:
       - Class weighting
       - Learning-rate scheduling
@@ -805,7 +794,6 @@ def train_model(model, train_loader, val_loader, epochs=50, lr=1e-3, device='cud
 
 
 ## Murmur Detection Wrapper
-
 class MurmurDetector:
     """
     Inference that applies a trained model with a tuned threshold
@@ -853,15 +841,14 @@ class MurmurDetector:
         return results
 
 #Main
-
 if __name__ == "__main__":
     # Configuration
     data_dir = "CirCor_DigiScope/training_data"
     batch_size = 64
     epochs = 50
     learning_rate = 1e-3
-    target_fs = 2000
-    max_length = 30.0
+    target_fs = 4000
+    max_length = 8.0
 
     # Class imbalance settings
     USE_WEIGHTED_SAMPLING = True
@@ -950,7 +937,6 @@ if __name__ == "__main__":
     )
 
     # Threshold Tuning
-
     print("\n" + "=" * 70)
     print("THRESHOLD TUNING")
     print("=" * 70)
