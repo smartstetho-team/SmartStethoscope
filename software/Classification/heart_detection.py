@@ -963,7 +963,7 @@ if __name__ == "__main__":
     checkpoint = torch.load('best_eko_model.pth')
     checkpoint['optimal_threshold'] = optimal_threshold
     checkpoint['threshold_results'] = results
-    torch.save(checkpoint, 'best_eko_model.pth')
+    torch.save(checkpoint, 'best_model.pth')
 
     print(f"\n✓ Model saved with optimal threshold: {optimal_threshold:.4f}")
 
