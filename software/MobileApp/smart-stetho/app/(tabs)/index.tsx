@@ -4,7 +4,9 @@ import { Audio, AVPlaybackStatus } from 'expo-av'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-
+import { InferenceSession, Tensor } from 'onnxruntime-react-native'
+import { Asset } from 'expo-asset'
+import { applyHeartFilter } from '@/utils/audio-processor'
 import {
   ActivityIndicator,
   Alert,
@@ -17,17 +19,17 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Path } from 'react-native-svg'
-
 import { getManager } from '@/utils/ble-manager'
 import { Buffer } from 'buffer'
+import * as DocumentPicker from 'expo-document-picker'
 
 global.Buffer = Buffer
 
 const STETHO_SERVICE_UUID = '0000abcd-0000-1000-8000-00805f9b34fb'
 const AUDIO_CHAR_UUID = '00001234-0000-1000-8000-00805f9b34fb'
-const EXPECTED_SIZE = 320000
+const EXPECTED_SIZE = 128000
 
-// --- 1. SYNCED ECG WAVEFORM ---
+// --- ECG WAVEFORM COMPONENT ---
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
 }
@@ -99,13 +101,12 @@ function SyncedECG({ bpm, active }: { bpm: number; active: boolean }) {
   )
 }
 
-// --- 2. PHONOCARDIOGRAM VISUALIZER ---
 function Phonocardiogram({ audioBuffer }: { audioBuffer: Buffer | null }) {
   const path = useMemo(() => {
     if (!audioBuffer || audioBuffer.length === 0) return ''
     const width = 300,
-      height = 80
-    const samples = []
+      height = 80,
+      samples = []
     const step = Math.floor(audioBuffer.length / 2 / width)
     for (let i = 0; i < width; i++) {
       const byteIdx = i * step * 2
@@ -117,7 +118,6 @@ function Phonocardiogram({ audioBuffer }: { audioBuffer: Buffer | null }) {
     }
     return `M${samples.join(' L')}`
   }, [audioBuffer])
-
   if (!audioBuffer) return null
   return (
     <View style={styles.pcgContainer}>
@@ -135,25 +135,255 @@ function Phonocardiogram({ audioBuffer }: { audioBuffer: Buffer | null }) {
   )
 }
 
+// --- ML RUNNER ---
+const softmax = (logits: number[]) => {
+  const maxLogit = Math.max(...logits)
+  const scores = logits.map((l) => Math.exp(l - maxLogit))
+  const total = scores.reduce((a, b) => a + b)
+  return scores.map((s) => s / total)
+}
+
+const runInference = async (audioData: Int16Array) => {
+  try {
+    const modelAsset = Asset.fromModule(
+      require('../../assets/models/best_multiclass.onnx'),
+    )
+    const dataAsset = Asset.fromModule(
+      require('../../assets/models/best_multiclass.onnx.data'),
+    )
+    await Promise.all([modelAsset.downloadAsync(), dataAsset.downloadAsync()])
+    const modelDir = `${FileSystem.documentDirectory}ml_model/`
+    await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true })
+    const modelFilePath = `${modelDir}best_multiclass.onnx`
+    const dataFilePath = `${modelDir}best_multiclass.onnx.data`
+    await FileSystem.copyAsync({
+      from: modelAsset.localUri!,
+      to: modelFilePath,
+    })
+    await FileSystem.copyAsync({ from: dataAsset.localUri!, to: dataFilePath })
+    const session = await InferenceSession.create(modelFilePath)
+    const TARGET_LENGTH = 32000
+    const float32Data = new Float32Array(TARGET_LENGTH)
+    for (let i = 0; i < TARGET_LENGTH; i++)
+      float32Data[i] = i < audioData.length ? audioData[i] / 32768.0 : 0
+    const inputTensor = new Tensor('float32', float32Data, [
+      1,
+      1,
+      TARGET_LENGTH,
+    ])
+    const outputs = await session.run({ [session.inputNames[0]]: inputTensor })
+    return softmax(
+      Array.from(outputs[session.outputNames[0]].data as Float32Array),
+    )
+  } catch (e) {
+    console.error('ML Inference Failed:', e)
+    return null
+  }
+}
+
 export default function Index() {
   const [recordedBPM, setRecordedBPM] = useState<number>(0)
   const [status, setStatus] = useState('Searching...')
   const [connectedDevice, setConnectedDevice] = useState<any>(null)
-
-  // Transfer Control
-  const [isTransferring, setIsTransferring] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const fullAudioData = useRef<Buffer>(Buffer.alloc(0))
-  const cleanAudioBuffer = useRef<Buffer | null>(null)
-  const localByteCount = useRef(0)
-  const packetCounter = useRef(0)
-
-  // Playback Control
   const [audioUri, setAudioUri] = useState<string | null>(null)
+  const [isFilteredMode, setIsFilteredMode] = useState(true)
+  const rawAudioUri = useRef<string | null>(null)
+  const filteredAudioUri = useRef<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const soundRef = useRef<Audio.Sound | null>(null)
+  const [isTransferring, setIsTransferring] = useState(false)
+  const [uiMessage, setUiMessage] = useState('Ready')
+  const [progress, setProgress] = useState(0)
+  const fullAudioData = useRef<Buffer>(Buffer.alloc(0))
+  const cleanAudioBuffer = useRef<Buffer | null>(null)
+  const localByteCount = useRef(0)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [mlResults, setMlResults] = useState<number[] | null>(null)
+
+  const onPlaybackStatusUpdate = (s: AVPlaybackStatus) => {
+    if (s.isLoaded) {
+      setPosition(s.positionMillis)
+      setDuration(s.durationMillis || 0)
+      setIsPlaying(s.isPlaying)
+    }
+  }
+
+  const switchMode = async (toFiltered: boolean) => {
+    const newUri = toFiltered ? filteredAudioUri.current : rawAudioUri.current
+    if (!newUri) return
+    setIsFilteredMode(toFiltered)
+    setAudioUri(newUri)
+    if (soundRef.current) {
+      const s = await soundRef.current.getStatusAsync()
+      if (s.isLoaded) {
+        const currentPos = s.positionMillis
+        const wasPlaying = s.isPlaying
+        await soundRef.current.unloadAsync()
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: newUri },
+          { shouldPlay: wasPlaying, positionMillis: currentPos },
+          onPlaybackStatusUpdate,
+        )
+        soundRef.current = sound
+      }
+    }
+  }
+
+  const finalizeAudio = async () => {
+    try {
+      if (soundRef.current) await soundRef.current.unloadAsync()
+      const rawData = fullAudioData.current
+      if (!rawData || rawData.length < 4) return
+      const pcmData = new Int16Array(rawData.length / 4)
+      for (let i = 0, pcmIdx = 0; i < rawData.length; i += 4) {
+        let rawVal = rawData.readUInt16LE(i) & 0x0fff
+        pcmData[pcmIdx++] = (rawVal - 2048) << 4
+      }
+      const rawPath = `${FileSystem.cacheDirectory}Raw_${Date.now()}.wav`
+      const rawHeader = createWavHeader(pcmData.byteLength, 4000)
+      await FileSystem.writeAsStringAsync(
+        rawPath,
+        Buffer.concat([rawHeader, Buffer.from(pcmData.buffer)]).toString(
+          'base64',
+        ),
+        { encoding: 'base64' },
+      )
+      rawAudioUri.current = rawPath
+      const filteredSamples = applyHeartFilter(pcmData)
+      const filteredBuffer = Buffer.from(filteredSamples.buffer)
+      const filteredPath = `${FileSystem.cacheDirectory}Filtered_${Date.now()}.wav`
+      const filteredHeader = createWavHeader(filteredBuffer.length, 4000)
+      await FileSystem.writeAsStringAsync(
+        filteredPath,
+        Buffer.concat([filteredHeader, filteredBuffer]).toString('base64'),
+        { encoding: 'base64' },
+      )
+      filteredAudioUri.current = filteredPath
+      cleanAudioBuffer.current = filteredBuffer
+      setAudioUri(isFilteredMode ? filteredPath : rawPath)
+      if (status === '1') {
+        const results = await runInference(filteredSamples)
+        if (results) setMlResults(results)
+      } else setMlResults(null)
+    } catch (err) {
+      console.error('Finalize Error:', err)
+    } finally {
+      setIsTransferring(false)
+      setProgress(0)
+      localByteCount.current = 0
+    }
+  }
+
+  const importRecording = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/x-wav',
+        copyToCacheDirectory: true,
+      })
+      if (result.canceled || !result.assets.length) return
+      setIsTransferring(true)
+      setUiMessage('Processing Upload...')
+      setStatus('File Uploaded')
+      const fileAsset = result.assets[0]
+      setUploadedFileName(fileAsset.name)
+      const base64Data = await FileSystem.readAsStringAsync(fileAsset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+      const rawAudio = Buffer.from(base64Data, 'base64').slice(44)
+      const rawSamples = new Int16Array(
+        rawAudio.buffer,
+        rawAudio.byteOffset,
+        rawAudio.byteLength / 2,
+      )
+      rawAudioUri.current = fileAsset.uri
+      const filteredSamples = applyHeartFilter(rawSamples)
+      const filteredBuffer = Buffer.from(filteredSamples.buffer)
+      const filteredPath = `${FileSystem.cacheDirectory}Filtered_Upload_${Date.now()}.wav`
+      const header = createWavHeader(filteredBuffer.length, 4000)
+      await FileSystem.writeAsStringAsync(
+        filteredPath,
+        Buffer.concat([header, filteredBuffer]).toString('base64'),
+        { encoding: 'base64' },
+      )
+      filteredAudioUri.current = filteredPath
+      cleanAudioBuffer.current = filteredBuffer
+      setAudioUri(isFilteredMode ? filteredPath : fileAsset.uri)
+      const results = await runInference(filteredSamples)
+      if (results) setMlResults(results)
+    } catch (error) {
+      Alert.alert('Upload Error', 'Failed to process file.')
+    } finally {
+      setIsTransferring(false)
+    }
+  }
+
+  const createWavHeader = (dataLength: number, sampleRate: number) => {
+    const header = Buffer.alloc(44)
+    header.write('RIFF', 0)
+    header.writeUInt32LE(36 + dataLength, 4)
+    header.write('WAVE', 8)
+    header.write('fmt ', 12)
+    header.writeUInt32LE(16, 16)
+    header.writeUInt16LE(1, 20)
+    header.writeUInt16LE(1, 22)
+    header.writeUInt32LE(sampleRate, 24)
+    header.writeUInt32LE(sampleRate * 2, 28)
+    header.writeUInt16LE(2, 32)
+    header.writeUInt16LE(16, 34)
+    header.write('data', 36)
+    header.writeUInt32LE(dataLength, 40)
+    return header
+  }
+
+  const startMonitoring = async () => {
+    if (!connectedDevice) return
+    try {
+      setStatus('Linked')
+      await connectedDevice.discoverAllServicesAndCharacteristics()
+      connectedDevice.monitorCharacteristicForService(
+        STETHO_SERVICE_UUID,
+        AUDIO_CHAR_UUID,
+        (err, char) => {
+          if (err || !char?.value) return
+          const chunk = Buffer.from(char.value, 'base64')
+          if (chunk[0] === 0xfe) {
+            setIsTransferring(true)
+            setUiMessage('Recording Heart Sounds...')
+            setUploadedFileName(null)
+            localByteCount.current = 0
+            fullAudioData.current = Buffer.alloc(0)
+            setAudioUri(null)
+            setMlResults(null)
+            return
+          }
+          if (chunk[0] === 0xff) {
+            const hwRes = chunk[1].toString()
+            const hwBpm = chunk[2]
+            setStatus(hwRes)
+            setRecordedBPM(hwBpm)
+            setUiMessage('Syncing Hardware Data...')
+            if (chunk.length > 4) {
+              const audioPart = chunk.slice(4)
+              fullAudioData.current = Buffer.concat([
+                fullAudioData.current,
+                audioPart,
+              ])
+              localByteCount.current += audioPart.length
+            }
+            return
+          }
+          fullAudioData.current = Buffer.concat([fullAudioData.current, chunk])
+          localByteCount.current += chunk.length
+          setProgress(Math.min(localByteCount.current / EXPECTED_SIZE, 1))
+          if (localByteCount.current >= EXPECTED_SIZE) finalizeAudio()
+        },
+      )
+    } catch (e) {
+      setStatus('Sync Error')
+    }
+  }
 
   useEffect(() => {
     const manager = getManager()
@@ -173,214 +403,14 @@ export default function Index() {
     if (connectedDevice) startMonitoring()
   }, [connectedDevice])
 
-  const startMonitoring = async () => {
-    if (!connectedDevice) return
-    try {
-      setStatus('Syncing...')
-      await connectedDevice.discoverAllServicesAndCharacteristics()
-      await new Promise((r) => setTimeout(r, 1000))
-
-      connectedDevice.monitorCharacteristicForService(
-        STETHO_SERVICE_UUID,
-        AUDIO_CHAR_UUID,
-        (err, char) => {
-          if (err) return
-          if (char?.value) {
-            if (
-              localByteCount.current === 0 ||
-              localByteCount.current >= EXPECTED_SIZE
-            ) {
-              setIsTransferring(true)
-              setAudioUri(null)
-              cleanAudioBuffer.current = null
-              fullAudioData.current = Buffer.alloc(0)
-              localByteCount.current = 0
-              packetCounter.current = 0
-              setRecordedBPM(0) // Reset for new file
-            }
-
-            const chunk = Buffer.from(char.value, 'base64')
-            fullAudioData.current = Buffer.concat([
-              fullAudioData.current,
-              chunk,
-            ])
-            localByteCount.current += chunk.length
-            packetCounter.current++
-
-            // --- EXTRACT BPM FROM METADATA (Bytes 2-3) ---
-            // We check the first 50 packets for a non-zero BPM value
-            if (recordedBPM === 0 && packetCounter.current < 50) {
-              const bpmValue = chunk.readUInt16LE(2)
-              if (bpmValue > 30 && bpmValue < 220) {
-                setRecordedBPM(bpmValue)
-                console.log('BPM Discovered in File:', bpmValue)
-              }
-            }
-
-            if (
-              packetCounter.current % 45 === 0 ||
-              localByteCount.current >= EXPECTED_SIZE
-            ) {
-              setProgress(localByteCount.current / EXPECTED_SIZE)
-            }
-            if (localByteCount.current >= EXPECTED_SIZE) finalizeAudio()
-          }
-        },
-      )
-      setStatus('Linked: ' + (connectedDevice.name || 'S3-Stetho'))
-    } catch (e) {
-      setStatus('Sync Error')
-    }
-  }
-
-  const finalizeAudio = async () => {
-    try {
-      if (soundRef.current) await soundRef.current.unloadAsync()
-      const rawData = fullAudioData.current
-      if (!rawData || rawData.length < 4) return
-
-      const cleanData = Buffer.alloc(rawData.length / 2)
-      let cleanIndex = 0
-
-      // --- FIXED BPM CALCULATION (Energy Window Method) ---
-      let peakCount = 0
-      let lastPeakSample = 0
-      const WINDOW_SIZE = 400 // Look at chunks of sound to smooth noise
-      const MIN_GAP = 4000 // Minimum samples between beats (~0.5s)
-      const ENERGY_THRESHOLD = 1500000 // Total energy needed to count as a "thump"
-
-      for (let i = 0; i < rawData.length; i += 4) {
-        let rawVal = rawData.readUInt16LE(i) & 0x0fff
-        let signedVal = (rawVal - 2048) << 6
-
-        // --- SMOOTHED PEAK DETECTION ---
-        const currentSampleIdx = cleanIndex / 2
-        if (currentSampleIdx % WINDOW_SIZE === 0 && currentSampleIdx > 0) {
-          let energy = 0
-          // Calculate energy of the last window
-          for (let j = 0; j < WINDOW_SIZE; j++) {
-            const sample = cleanData.readInt16LE((currentSampleIdx - j) * 2)
-            energy += Math.abs(sample)
-          }
-
-          // If energy spikes and we haven't seen a beat recently
-          if (
-            energy > ENERGY_THRESHOLD &&
-            currentSampleIdx - lastPeakSample > MIN_GAP
-          ) {
-            peakCount++
-            lastPeakSample = currentSampleIdx
-          }
-        }
-
-        cleanData.writeInt16LE(
-          Math.max(-32768, Math.min(32767, signedVal)),
-          cleanIndex,
-        )
-        cleanIndex += 2
-      }
-
-      // Math: (Peaks in 10s) * 6 = BPM
-      const finalBPM = peakCount * 6
-      // Constrain to human limits so it doesn't show crazy numbers
-      setRecordedBPM(finalBPM > 30 && finalBPM < 200 ? finalBPM : 72)
-
-      cleanAudioBuffer.current = cleanData
-      const path = `${FileSystem.cacheDirectory}Stetho_${Date.now()}.wav`
-      const header = createWavHeader(cleanData.length)
-      await FileSystem.writeAsStringAsync(
-        path,
-        Buffer.concat([header, cleanData]).toString('base64'),
-        { encoding: 'base64' },
-      )
-
-      setAudioUri(path)
-    } catch (err) {
-      console.error('Finalize Error:', err)
-    } finally {
-      setIsTransferring(false)
-      setProgress(0)
-      localByteCount.current = EXPECTED_SIZE
-    }
-  }
-
-  const createWavHeader = (dataLength: number) => {
-    const header = Buffer.alloc(44)
-    header.write('RIFF', 0)
-    header.writeUInt32LE(36 + dataLength, 4)
-    header.write('WAVE', 8)
-    header.write('fmt ', 12)
-    header.writeUInt32LE(16, 16)
-    header.writeUInt16LE(1, 20)
-    header.writeUInt16LE(1, 22)
-    header.writeUInt32LE(8000, 24)
-    header.writeUInt32LE(16000, 28)
-    header.writeUInt16LE(2, 32)
-    header.writeUInt16LE(16, 34)
-    header.write('data', 36)
-    header.writeUInt32LE(dataLength, 40)
-    return header
-  }
-
-  const onPlaybackStatusUpdate = (s: AVPlaybackStatus) => {
-    if (s.isLoaded) {
-      setPosition(s.positionMillis)
-      setDuration(s.durationMillis || 0)
-      setIsPlaying(s.isPlaying)
-      if (s.didJustFinish) {
-        setIsPlaying(false)
-        setPosition(0)
-      }
-    }
-  }
-
-  const togglePlayback = async () => {
-    if (!audioUri) return
-    try {
-      if (soundRef.current) {
-        const s = await soundRef.current.getStatusAsync()
-        if (s.isLoaded) {
-          isPlaying
-            ? await soundRef.current.pauseAsync()
-            : await soundRef.current.playAsync()
-          return
-        }
-      }
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate,
-      )
-      soundRef.current = sound
-    } catch (e) {
-      console.warn('Playback Error:', e)
-    }
-  }
-
-  const exportRecording = async () => {
-    if (!audioUri) return
-    try {
-      const canShare = await Sharing.isAvailableAsync()
-      if (canShare)
-        await Sharing.shareAsync(audioUri, {
-          mimeType: 'audio/wav',
-          dialogTitle: 'Export Heart Sound',
-        })
-    } catch (e) {
-      Alert.alert('Export Error', 'Failed to share file.')
-    }
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <Modal visible={isTransferring} transparent={true} animationType='fade'>
+      <Modal visible={isTransferring} transparent animationType='fade'>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ActivityIndicator size='large' color='#3498db' />
-            <Text style={styles.modalTitle}>Processing Recording</Text>
-            <Text style={styles.modalSubtitle}>
-              Extracting Audio & BPM Sync...
-            </Text>
+            <Text style={styles.modalTitle}>Device Active</Text>
+            <Text style={styles.modalSubtitle}>{uiMessage}</Text>
             <View style={styles.modalProgressContainer}>
               <View
                 style={[
@@ -404,38 +434,77 @@ export default function Index() {
             { color: connectedDevice ? '#3498db' : '#FF3B30' },
           ]}
         >
-          {status}
+          {status === '1'
+            ? 'Abnormal Detected'
+            : status === '0'
+              ? 'Normal Reading'
+              : status}
         </Text>
       </View>
 
       <ScrollView style={styles.dashboard}>
         <View style={styles.darkCard}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>Stethoscope Analysis</Text>
+            <Text style={styles.cardTitle}>
+              {uploadedFileName
+                ? `File: ${uploadedFileName}`
+                : 'Stethoscope Feed'}
+            </Text>
             <Ionicons
               name='pulse'
               size={20}
               color={isPlaying ? '#3498db' : '#555'}
             />
           </View>
-
           {audioUri ? (
             <View>
               <Text style={styles.hrValueText}>
-                {recordedBPM}{' '}
+                {recordedBPM || '--'}{' '}
                 <Text style={{ fontSize: 22, color: '#3498db' }}>bpm</Text>
               </Text>
-
-              {/* THE SYNCED ECG - Controlled by audio playback */}
-              <SyncedECG bpm={recordedBPM} active={isPlaying} />
-
+              <SyncedECG bpm={recordedBPM || 72} active={isPlaying} />
               <Phonocardiogram audioBuffer={cleanAudioBuffer.current} />
-
+              <View style={styles.toggleContainer}>
+                <TouchableOpacity
+                  onPress={() => switchMode(false)}
+                  style={[
+                    styles.toggleBtn,
+                    !isFilteredMode && styles.toggleBtnActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      !isFilteredMode && styles.toggleTextActive,
+                    ]}
+                  >
+                    RAW
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => switchMode(true)}
+                  style={[
+                    styles.toggleBtn,
+                    isFilteredMode && styles.toggleBtnActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      isFilteredMode && styles.toggleTextActive,
+                    ]}
+                  >
+                    FILTERED
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.timeRow}>
                 <Text style={styles.timeText}>
                   {Math.floor(position / 1000)}s
                 </Text>
-                <Text style={styles.timeText}>10.0s</Text>
+                <Text style={styles.timeText}>
+                  {Math.floor(duration / 1000)}.0s
+                </Text>
               </View>
               <Slider
                 style={{ width: '100%', height: 40 }}
@@ -444,9 +513,38 @@ export default function Index() {
                 value={position}
                 minimumTrackTintColor='#3498db'
                 thumbTintColor='#3498db'
-                onSlidingComplete={(v) => soundRef.current?.setPositionAsync(v)}
+                onSlidingComplete={async (v) => {
+                  if (soundRef.current) {
+                    const s = await soundRef.current.getStatusAsync()
+                    if (s.isLoaded) await soundRef.current.setPositionAsync(v)
+                  }
+                }}
               />
-              <TouchableOpacity onPress={togglePlayback} style={styles.playBtn}>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!audioUri) return
+                  try {
+                    if (soundRef.current) {
+                      const s = await soundRef.current.getStatusAsync()
+                      if (s.isLoaded) {
+                        isPlaying
+                          ? await soundRef.current.pauseAsync()
+                          : await soundRef.current.playAsync()
+                        return
+                      }
+                    }
+                    const { sound } = await Audio.Sound.createAsync(
+                      { uri: audioUri },
+                      { shouldPlay: true },
+                      onPlaybackStatusUpdate,
+                    )
+                    soundRef.current = sound
+                  } catch (e) {
+                    console.warn(e)
+                  }
+                }}
+                style={styles.playBtn}
+              >
                 <Ionicons
                   name={isPlaying ? 'pause' : 'play'}
                   size={32}
@@ -458,19 +556,90 @@ export default function Index() {
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
               <Ionicons name='mic-circle' size={64} color='#222' />
               <Text style={styles.placeholder}>
-                Awaiting hardware trigger...
+                Press hardware button or upload file...
               </Text>
             </View>
           )}
         </View>
 
-        <TouchableOpacity
-          onPress={exportRecording}
-          style={styles.primaryButton}
-        >
-          <Text style={styles.primaryButtonText}>Export Recording</Text>
-          <Ionicons name='share-outline' size={20} color='white' />
-        </TouchableOpacity>
+        {mlResults ? (
+          <View style={styles.mlResultsCard}>
+            <Text style={styles.cardTitle}>Detailed Triage Analysis</Text>
+            <View style={{ marginTop: 15 }}>
+              {[
+                {
+                  label: 'Early Sys/Dia',
+                  value: mlResults[0],
+                  color: '#3498db',
+                },
+                {
+                  label: 'Holosystolic',
+                  value: mlResults[1],
+                  color: '#e67e22',
+                },
+                {
+                  label: 'Mid/Late Sys',
+                  value: mlResults[2],
+                  color: '#e74c3c',
+                },
+              ].map((item, idx) => (
+                <View key={idx} style={styles.probabilityRow}>
+                  <Text style={styles.probLabel}>{item.label}</Text>
+                  <View style={styles.probBarContainer}>
+                    <View
+                      style={[
+                        styles.probBar,
+                        {
+                          width: `${item.value * 100}%`,
+                          backgroundColor: item.color,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.probValue}>
+                    {(item.value * 100).toFixed(1)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : audioUri && (status === '0' || status === 'Normal Reading') ? (
+          <View style={styles.normalResultCard}>
+            <View style={styles.statusBadge}>
+              <Ionicons name='checkmark-circle' size={24} color='#2ecc71' />
+              <Text style={styles.normalTitle}>Heart Signal Healthy</Text>
+            </View>
+            <Text style={styles.normalSub}>
+              The automated hardware triage did not detect any significant
+              murmur patterns.
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            onPress={async () => {
+              if (!audioUri) return
+              try {
+                if (await Sharing.isAvailableAsync())
+                  await Sharing.shareAsync(audioUri)
+              } catch (e) {
+                Alert.alert('Error', 'Share failed')
+              }
+            }}
+            style={[styles.primaryButton, { flex: 1, marginRight: 10 }]}
+          >
+            <Text style={styles.primaryButtonText}>Share</Text>
+            <Ionicons name='share-outline' size={20} color='white' />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={importRecording}
+            style={[styles.secondaryButton, { flex: 1 }]}
+          >
+            <Text style={styles.secondaryButtonText}>Upload</Text>
+            <Ionicons name='cloud-upload-outline' size={20} color='#3498db' />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -519,6 +688,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginRight: 10,
   },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#3498db',
+    padding: 18,
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#3498db',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 10,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
   placeholder: {
     color: '#555',
     textAlign: 'center',
@@ -533,6 +723,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 5,
   },
+  mlResultsCard: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+  },
+  probabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  probLabel: { color: '#FFF', width: 95, fontSize: 13, fontWeight: '600' },
+  probBarContainer: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#333',
+    borderRadius: 4,
+    marginHorizontal: 10,
+    overflow: 'hidden',
+  },
+  probBar: { height: '100%', borderRadius: 4 },
+  probValue: { color: '#888', width: 45, fontSize: 12, textAlign: 'right' },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.92)',
@@ -579,4 +791,38 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   timeText: { color: '#555', fontSize: 12 },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 15,
+    alignSelf: 'center',
+  },
+  toggleBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8 },
+  toggleBtnActive: { backgroundColor: '#3498db' },
+  toggleText: { color: '#888', fontSize: 12, fontWeight: 'bold' },
+  toggleTextActive: { color: '#FFF' },
+  normalResultCard: {
+    backgroundColor: '#fafffb',
+    borderWidth: 2,
+    borderColor: '#2ecc71',
+    borderRadius: 24,
+    padding: 25,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  normalTitle: {
+    color: '#2ecc71',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  normalSub: {
+    color: '#555',
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
+  },
 })
