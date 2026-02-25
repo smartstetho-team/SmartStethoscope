@@ -57,11 +57,20 @@ void audio_sampling_task(void *audio_parameters)
 
     uint8_t read_buffer[READ_LEN];
     uint32_t bytes_read = 0;
+
+    // Sending button press via BLE
+    NimBLECharacteristic* pAudioDataChar = params->pAudioDataChar;
         
     while (1)
     {
         // Block audio sampling task until button pressed via hardware interrupt
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        // --- STEP 0: NOTIFY APP IMMEDIATELY ---
+        // Send a 4-byte packet starting with 0xFE to tell the app to start loading
+        uint8_t start_signal[4] = {0xFE, 0x00, 0x00, 0x00};
+        pAudioDataChar->setValue(start_signal, sizeof(start_signal));
+        pAudioDataChar->notify();
 
         xEventGroupSetBits(event_group_handle, AUDIO_RECORDING_START_BIT);
 

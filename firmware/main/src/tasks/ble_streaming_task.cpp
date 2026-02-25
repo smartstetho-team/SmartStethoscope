@@ -15,13 +15,29 @@ void ble_streaming_task(void *pvParameters) {
     ESP_LOGI(BLE_STREAMING_TASK_TAG, "Starting BLE streaming task");
 
     while (1) {
-        // Wait for BOTH the recording to be done AND the streaming request to be active
         xEventGroupWaitBits(event_group_handle, 
-                            AUDIO_RECORDING_DONE_BIT | BLE_STREAMING_START_BIT, 
-                            pdFALSE, // Don't clear bits yet
-                            pdTRUE,  // Wait for both
+                            ML_CLASSIFICATION_END_BIT | BLE_STREAMING_START_BIT, 
+                            pdFALSE, 
+                            pdTRUE,  
                             portMAX_DELAY);
 
+        // --- STEP 1: Send Metadata with Sync Header ---
+        uint8_t metadata[4];
+        metadata[0] = 0xFF;                          // SYNC BYTE: Identifies this as metadata
+        metadata[1] = params->classification_result; // 1 for Abnormal, 0 for Normal
+        metadata[2] = (uint8_t)params->calculated_bpm;
+        metadata[3] = 0x00;                          // Padding
+
+        ESP_LOGI(BLE_STREAMING_TASK_TAG, ">>> SENDING METADATA: Status=%d, BPM=%d", 
+                 metadata[1], metadata[2]);
+        
+        pAudioDataChar->setValue(metadata, 4);
+        pAudioDataChar->notify();
+
+        // Give React Native enough time to update UI state before the audio flood
+        vTaskDelay(pdMS_TO_TICKS(300));
+
+        // --- STEP 2: Burst the Wav File ---
         ESP_LOGI(BLE_STREAMING_TASK_TAG, "Bursting audio to iPhone...");
 
         size_t total_size = MASTER_AUDIO_BUFFER_SIZE;
@@ -31,30 +47,23 @@ void ble_streaming_task(void *pvParameters) {
         while (sent_bytes < total_size) {
             size_t to_send = std::min(CHUNK_SIZE, total_size - sent_bytes);
             
-            // Set data and notify
             pAudioDataChar->setValue(&master_audio_buffer[sent_bytes], to_send);
             
-            if(!pAudioDataChar->notify()) {
-                // If congestion occurs, wait longer
-                vTaskDelay(pdMS_TO_TICKS(20)); 
+            // Only increment sent_bytes if notify succeeded
+            if(pAudioDataChar->notify()) {
+                sent_bytes += to_send;
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(20)); // Congestion handling
                 continue; 
             }
 
-            sent_bytes += to_send;
-            
-            // Stability delay: keeps the iOS BLE stack from crashing
             vTaskDelay(pdMS_TO_TICKS(12)); 
         }
 
         ESP_LOGI(BLE_STREAMING_TASK_TAG, "Transfer finished successfully.");
 
-        // --- CLEANUP ---
-        // Signal that we are done so the record task can take over again
         xEventGroupSetBits(event_group_handle, BLE_STREAMING_END_BIT);
-        
-        // Clear the start bits so we don't loop infinitely
         xEventGroupClearBits(event_group_handle, BLE_STREAMING_START_BIT);
-        
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

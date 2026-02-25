@@ -220,6 +220,10 @@ void ml_classification_task(void *dsp_ml_parameters)
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
+        // Set BPM & Abnormal/Normal (to be sent via BLE)
+        params->calculated_bpm = final_bpm;
+        params->classification_result = (output[1] > MURMUR_THRESHOLD) ? 1 : 0;
+
         xEventGroupSetBits(event_group_handle, ML_CLASSIFICATION_END_BIT);
         xEventGroupClearBits(event_group_handle, ML_CLASSIFICATION_START_BIT);
         vTaskDelay(pdMS_TO_TICKS(100));
