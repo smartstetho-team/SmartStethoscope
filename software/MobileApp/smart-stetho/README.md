@@ -1,3 +1,6 @@
+Install dependencies:
+`npm install`
+
 Rebuild:
 `npx expo prebuild --clean`
 
