@@ -17,27 +17,10 @@ void ble_streaming_task(void *pvParameters) {
     while (1) {
         xEventGroupWaitBits(event_group_handle, 
                             ML_CLASSIFICATION_END_BIT | BLE_STREAMING_START_BIT, 
-                            pdFALSE, 
-                            pdTRUE,  
+                            pdFALSE, // Don't clear bits yet
+                            pdTRUE,  // Wait for both
                             portMAX_DELAY);
 
-        // --- STEP 1: Send Metadata with Sync Header ---
-        uint8_t metadata[4];
-        metadata[0] = 0xFF;                          // SYNC BYTE: Identifies this as metadata
-        metadata[1] = params->classification_result; // 1 for Abnormal, 0 for Normal
-        metadata[2] = (uint8_t)params->calculated_bpm;
-        metadata[3] = 0x00;                          // Padding
-
-        ESP_LOGI(BLE_STREAMING_TASK_TAG, ">>> SENDING METADATA: Status=%d, BPM=%d", 
-                 metadata[1], metadata[2]);
-        
-        pAudioDataChar->setValue(metadata, 4);
-        pAudioDataChar->notify();
-
-        // Give React Native enough time to update UI state before the audio flood
-        vTaskDelay(pdMS_TO_TICKS(300));
-
-        // --- STEP 2: Burst the Wav File ---
         ESP_LOGI(BLE_STREAMING_TASK_TAG, "Bursting audio to iPhone...");
 
         size_t total_size = MASTER_AUDIO_BUFFER_SIZE;
