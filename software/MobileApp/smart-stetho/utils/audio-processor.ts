@@ -1,35 +1,51 @@
-// utils/audio-processor.ts
+export const applyHeartFilter = (samples: Int16Array): Int16Array => {
+  const output = new Int16Array(samples.length)
 
-/**
- * Bandpass Filter (20Hz - 500Hz)
- * Optimized for heart sounds at 4000Hz sampling rate.
- * Removes low-frequency 'rumble' and high-frequency 'hiss'.
- */
-export const applyHeartFilter = (data: Int16Array): Int16Array => {
-  const n = data.length
-  const filtered = new Int16Array(n)
+  // --- Coefficients from your ESP script (8000Hz) ---
+  const notch = {
+    b: [0.99217, -1.978665, 0.99217],
+    a: [1.0, -1.978665, 0.984341],
+  }
+  const stage1 = {
+    b: [0.002035, 0.004071, 0.002035],
+    a: [1.0, -1.91617, 0.920516],
+  }
+  const stage2 = { b: [1.0, -2.0, 1.0], a: [1.0, -1.860136, 0.86407] }
 
-  // Internal state for IIR filters
-  let lowPassState = 0
-  let highPassState = 0
+  // Delay states for each biquad section [z-1, z-2]
+  const zN = [0, 0],
+    z1 = [0, 0],
+    z2 = [0, 0]
 
-  // Alpha coefficients (Adjusted for 4000Hz)
-  // LP Alpha 0.45 targets roughly 500Hz
-  // HP Alpha 0.98 targets roughly 20Hz
-  const alphaLP = 0.45
-  const alphaHP = 0.98
-
-  for (let i = 0; i < n; i++) {
-    // 1. Low Pass Filter (Removes high-freq electronic noise)
-    lowPassState = alphaLP * data[i] + (1 - alphaLP) * lowPassState
-
-    // 2. High Pass Filter (Removes DC offset and motion artifacts)
-    const delta = lowPassState - (i > 0 ? data[i - 1] : data[i])
-    highPassState = alphaHP * (highPassState + delta)
-
-    // Clamp to Int16 range to prevent clipping
-    filtered[i] = Math.max(-32768, Math.min(32767, highPassState))
+  /** * Biquad Direct Form II Transposed implementation
+   * Efficient for fixed-point hardware and mobile CPUs
+   */
+  const processBiquad = (x: number, coeffs: any, delay: number[]) => {
+    const y = coeffs.b[0] * x + delay[0]
+    delay[0] = coeffs.b[1] * x - coeffs.a[1] * y + delay[1]
+    delay[1] = coeffs.b[2] * x - coeffs.a[2] * y
+    return y
   }
 
-  return filtered
+  for (let i = 0; i < samples.length; i++) {
+    // 1. Normalize input (-1.0 to 1.0)
+    let sample = samples[i] / 32768.0
+
+    // 2. Cascade processing
+    sample = processBiquad(sample, notch, zN) // Remove 60Hz hum
+    sample = processBiquad(sample, stage1, z1) // Bandpass Stage 1
+    sample = processBiquad(sample, stage2, z2) // Bandpass Stage 2
+
+    // 3. Digital Gain & Normalization
+    // Use a high gain (e.g., 25.0) to make subtle S1/S2 sounds audible
+    let boosted = sample * 25.0
+
+    // Hard clipping protection
+    if (boosted > 1.0) boosted = 1.0
+    if (boosted < -1.0) boosted = -1.0
+
+    output[i] = Math.round(boosted * 32767)
+  }
+
+  return output
 }
