@@ -29,6 +29,10 @@ typedef struct
     float* inference_buffer_a;                  // Buffer 1 for heart inference
     float* inference_buffer_b;                  // Buffer 2 for heart inference
 
+    // Results to be shared with BLE
+    uint8_t classification_result; // 0 for Normal, 1 for Abnormal
+    int calculated_bpm;
+    
     NimBLECharacteristic* pHeartChar;           // BLE handle for heart data
     NimBLECharacteristic* pAudioDataChar;       // BLE Handle for audio data
     NimBLECharacteristic* pBatteryChar;         // BLE Handle for battery data
