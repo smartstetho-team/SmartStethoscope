@@ -2,6 +2,7 @@
 
 #include "drivers/lcd_display.h"
 #include "drivers/power_mgmt.h"
+#include <driver/gpio.h>
 #include "cmn.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -39,37 +40,74 @@ void lcd_ui_task(void *lcd_ui_parameters)
 
     while (1) 
     {
-        // If battery is low, put device into sleep mode
+        uint32_t notified_value;
+
         // LBO pin fires an interrupt on a falling edge
-        if (ulTaskNotifyTake(pdTRUE, 0)) 
+        // Charging pin fires an interrupt on a rising edge
+        if (xTaskNotifyWait(0, 0xFFFFFFFF, &notified_value, 0) == pdTRUE) 
         {
-            _lock_acquire(&lcd_params.lvgl_api_lock);
+            ESP_LOGI(LCD_UI_TASK_TAG, "Notification received! Bits: 0x%08X", notified_value);
 
-            lv_obj_t * active_scr = lv_screen_active();
-            lv_obj_clean(active_scr);
+            // CASE 1: Low Battery (Priority 1)
+            if (notified_value & BIT_LBO) 
+            {
+                ESP_LOGI(LCD_UI_TASK_TAG, "Low power detection interrupt!");
+                _lock_acquire(&lcd_params.lvgl_api_lock);
 
-            lv_obj_t *err_icon = lv_label_create(active_scr);
-            lv_label_set_text(err_icon, LV_SYMBOL_BATTERY_1);
-            lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
+                lv_obj_t * active_scr = lv_screen_active();
+                lv_obj_clean(active_scr);
 
-            lv_obj_t *end_label = lv_label_create(active_scr);
-            lv_label_set_text(end_label, "Battery low");
-            lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
-            lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
+                lv_obj_t *err_icon = lv_label_create(active_scr);
+                lv_label_set_text(err_icon, LV_SYMBOL_BATTERY_1);
+                lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
 
-            lv_obj_t *end_sub1 = lv_label_create(active_scr);
-            lv_label_set_text(end_sub1, "Going to sleep..");
-            lv_obj_align(end_sub1, LV_ALIGN_CENTER, 0, 45);
+                lv_obj_t *end_label = lv_label_create(active_scr);
+                lv_label_set_text(end_label, "Battery low");
+                lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
+                lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
-            _lock_release(&lcd_params.lvgl_api_lock);
+                lv_obj_t *end_sub1 = lv_label_create(active_scr);
+                lv_label_set_text(end_sub1, "Going to sleep..");
+                lv_obj_align(end_sub1, LV_ALIGN_CENTER, 0, 45);
 
-            lv_timer_handler();
+                _lock_release(&lcd_params.lvgl_api_lock);
 
-            vTaskDelay(pdMS_TO_TICKS(5000));
-            
-            // Go to sleep
-            esp_sleep_enable_ext0_wakeup(LBO_GPIO_PIN, 1); 
-            esp_deep_sleep_start();
+                lv_timer_handler();
+
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                
+                // Go to sleep
+                esp_sleep_enable_ext0_wakeup(LBO_GPIO_PIN, 1); 
+                esp_deep_sleep_start();
+            }
+
+            // CASE 2: Charging (Priority 2)
+            static lv_obj_t *chg_label = NULL;
+            if (notified_value & BIT_CHARGING) 
+            {
+                ESP_LOGI(LCD_UI_TASK_TAG, "Charging dock interrupt!");
+                bool is_docked = (gpio_get_level(CHARGING_GPIO_PIN) == 1);
+                _lock_acquire(&lcd_params.lvgl_api_lock);
+                
+                if (is_docked) {
+                    if (chg_label == NULL) {
+                        chg_label = lv_label_create(lv_screen_active());
+                        lv_label_set_text(chg_label, LV_SYMBOL_CHARGE " Docked");
+                        lv_obj_align(chg_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+                        ESP_LOGI(LCD_UI_TASK_TAG, "UI: Charging Icon Added");
+                    }
+                }
+                else {
+                    // If we just unplugged and the label exists, kill it
+                    if (chg_label != NULL) {
+                        lv_obj_del(chg_label); 
+                        chg_label = NULL; // Reset to NULL so we can create it again later
+                        ESP_LOGI(LCD_UI_TASK_TAG, "UI: Charging Icon Removed");
+                    }
+                }   
+                
+                _lock_release(&lcd_params.lvgl_api_lock);
+            }
         }
 
         _lock_acquire(&lcd_params.lvgl_api_lock);
