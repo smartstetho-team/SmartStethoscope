@@ -28,6 +28,7 @@ typedef struct
 
     float* inference_buffer_a;                  // Buffer 1 for heart inference
     float* inference_buffer_b;                  // Buffer 2 for heart inference
+    float* inference_buffer_skip;                // Buffer for skip connections in heart inference
 
     // Results to be shared with BLE
     uint8_t classification_result; // 0 for Normal, 1 for Abnormal
