@@ -98,7 +98,7 @@ extern "C" void app_main(void)
 
     task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
     task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
-    task_parameters.inference_buffer_skip = (float*)heap_caps_malloc(100000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_skip = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
 
 
     if (task_parameters.master_audio_buffer == NULL || 
