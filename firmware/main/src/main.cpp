@@ -30,6 +30,7 @@ task_params task_parameters =
     .event_group_handle = NULL,
     .inference_buffer_a = NULL,
     .inference_buffer_b = NULL,
+    .inference_buffer_skip = NULL,
     .pHeartChar = NULL,
     .pAudioDataChar = NULL,
     .pBatteryChar = NULL,
@@ -95,13 +96,16 @@ extern "C" void app_main(void)
     task_parameters.filtered_audio_buffer = (float*)heap_caps_malloc
                                             (NUM_OF_SAMPLES * sizeof(float), MALLOC_CAP_SPIRAM);
 
-    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
-    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(3100000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_a = (float*)heap_caps_malloc(2200000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_b = (float*)heap_caps_malloc(2200000, MALLOC_CAP_SPIRAM);
+    task_parameters.inference_buffer_skip = (float*)heap_caps_malloc(2200000, MALLOC_CAP_SPIRAM);
+
 
     if (task_parameters.master_audio_buffer == NULL || 
         task_parameters.filtered_audio_buffer == NULL ||
         task_parameters.inference_buffer_a == NULL ||
-        task_parameters.inference_buffer_b == NULL)
+        task_parameters.inference_buffer_b == NULL || 
+        task_parameters.inference_buffer_skip == NULL)
     {
         ESP_LOGE(MAIN_TAG, "PSRAM Allocation Failed! Critical Error. \\
                  Current Free PSRAM: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));

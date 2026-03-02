@@ -183,12 +183,14 @@ const runInference = async (audioData: Int16Array) => {
 
 export default function Index() {
   const [recordedBPM, setRecordedBPM] = useState<number>(0)
-  const [status, setStatus] = useState('Searching...')
+  const [status, setStatus] = useState('Disconnected')
   const [connectedDevice, setConnectedDevice] = useState<any>(null)
   const [audioUri, setAudioUri] = useState<string | null>(null)
   const [isFilteredMode, setIsFilteredMode] = useState(true)
   const rawAudioUri = useRef<string | null>(null)
   const filteredAudioUri = useRef<string | null>(null)
+  const rawAudioBuffer = useRef<Buffer | null>(null)
+  const filteredAudioBuffer = useRef<Buffer | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -197,9 +199,7 @@ export default function Index() {
   const [uiMessage, setUiMessage] = useState('Ready')
   const [progress, setProgress] = useState(0)
   const fullAudioData = useRef<Buffer>(Buffer.alloc(0))
-  const cleanAudioBuffer = useRef<Buffer | null>(null)
   const localByteCount = useRef(0)
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [mlResults, setMlResults] = useState<number[] | null>(null)
 
   const onPlaybackStatusUpdate = (s: AVPlaybackStatus) => {
@@ -210,16 +210,19 @@ export default function Index() {
     }
   }
 
+  // --- FIXED camelCase switchMode ---
   const switchMode = async (toFiltered: boolean) => {
     const newUri = toFiltered ? filteredAudioUri.current : rawAudioUri.current
-    if (!newUri) return
+    if (!newUri || toFiltered === isFilteredMode) return
+
     setIsFilteredMode(toFiltered)
     setAudioUri(newUri)
+
     if (soundRef.current) {
-      const s = await soundRef.current.getStatusAsync()
-      if (s.isLoaded) {
-        const currentPos = s.positionMillis
-        const wasPlaying = s.isPlaying
+      const status = await soundRef.current.getStatusAsync()
+      if (status.isLoaded) {
+        const currentPos = status.positionMillis
+        const wasPlaying = status.isPlaying
         await soundRef.current.unloadAsync()
         const { sound } = await Audio.Sound.createAsync(
           { uri: newUri },
@@ -234,13 +237,15 @@ export default function Index() {
   const finalizeAudio = async () => {
     try {
       if (soundRef.current) await soundRef.current.unloadAsync()
-      const rawData = fullAudioData.current
+      const rawData = fullAudioData.current.slice(0, EXPECTED_SIZE)
       if (!rawData || rawData.length < 4) return
+
       const pcmData = new Int16Array(rawData.length / 4)
       for (let i = 0, pcmIdx = 0; i < rawData.length; i += 4) {
         let rawVal = rawData.readUInt16LE(i) & 0x0fff
         pcmData[pcmIdx++] = (rawVal - 2048) << 4
       }
+
       const rawPath = `${FileSystem.cacheDirectory}Raw_${Date.now()}.wav`
       const rawHeader = createWavHeader(pcmData.byteLength, 4000)
       await FileSystem.writeAsStringAsync(
@@ -251,6 +256,8 @@ export default function Index() {
         { encoding: 'base64' },
       )
       rawAudioUri.current = rawPath
+      rawAudioBuffer.current = Buffer.from(pcmData.buffer)
+
       const filteredSamples = applyHeartFilter(pcmData)
       const filteredBuffer = Buffer.from(filteredSamples.buffer)
       const filteredPath = `${FileSystem.cacheDirectory}Filtered_${Date.now()}.wav`
@@ -261,61 +268,19 @@ export default function Index() {
         { encoding: 'base64' },
       )
       filteredAudioUri.current = filteredPath
-      cleanAudioBuffer.current = filteredBuffer
+      filteredAudioBuffer.current = filteredBuffer
+
+      const results = await runInference(filteredSamples)
+      if (results) setMlResults(results)
+
       setAudioUri(isFilteredMode ? filteredPath : rawPath)
-      if (status === '1') {
-        const results = await runInference(filteredSamples)
-        if (results) setMlResults(results)
-      } else setMlResults(null)
     } catch (err) {
       console.error('Finalize Error:', err)
     } finally {
       setIsTransferring(false)
       setProgress(0)
       localByteCount.current = 0
-    }
-  }
-
-  const importRecording = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/x-wav',
-        copyToCacheDirectory: true,
-      })
-      if (result.canceled || !result.assets.length) return
-      setIsTransferring(true)
-      setUiMessage('Processing Upload...')
-      setStatus('File Uploaded')
-      const fileAsset = result.assets[0]
-      setUploadedFileName(fileAsset.name)
-      const base64Data = await FileSystem.readAsStringAsync(fileAsset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
-      const rawAudio = Buffer.from(base64Data, 'base64').slice(44)
-      const rawSamples = new Int16Array(
-        rawAudio.buffer,
-        rawAudio.byteOffset,
-        rawAudio.byteLength / 2,
-      )
-      rawAudioUri.current = fileAsset.uri
-      const filteredSamples = applyHeartFilter(rawSamples)
-      const filteredBuffer = Buffer.from(filteredSamples.buffer)
-      const filteredPath = `${FileSystem.cacheDirectory}Filtered_Upload_${Date.now()}.wav`
-      const header = createWavHeader(filteredBuffer.length, 4000)
-      await FileSystem.writeAsStringAsync(
-        filteredPath,
-        Buffer.concat([header, filteredBuffer]).toString('base64'),
-        { encoding: 'base64' },
-      )
-      filteredAudioUri.current = filteredPath
-      cleanAudioBuffer.current = filteredBuffer
-      setAudioUri(isFilteredMode ? filteredPath : fileAsset.uri)
-      const results = await runInference(filteredSamples)
-      if (results) setMlResults(results)
-    } catch (error) {
-      Alert.alert('Upload Error', 'Failed to process file.')
-    } finally {
-      setIsTransferring(false)
+      setUiMessage('Ready')
     }
   }
 
@@ -348,40 +313,34 @@ export default function Index() {
         (err, char) => {
           if (err || !char?.value) return
           const chunk = Buffer.from(char.value, 'base64')
-          if (chunk[0] === 0xfe) {
+
+          if (chunk[0] === 0xfe && chunk.length < 5) {
             setIsTransferring(true)
-            setUiMessage('Recording Heart Sounds...')
-            setUploadedFileName(null)
+            setUiMessage('Syncing Hardware...')
             localByteCount.current = 0
             fullAudioData.current = Buffer.alloc(0)
             setAudioUri(null)
-            setMlResults(null)
             return
           }
-          if (chunk[0] === 0xff) {
-            const hwRes = chunk[1].toString()
-            const hwBpm = chunk[2]
-            setStatus(hwRes)
-            setRecordedBPM(hwBpm)
-            setUiMessage('Syncing Hardware Data...')
-            if (chunk.length > 4) {
-              const audioPart = chunk.slice(4)
-              fullAudioData.current = Buffer.concat([
-                fullAudioData.current,
-                audioPart,
-              ])
-              localByteCount.current += audioPart.length
-            }
+
+          if (chunk[0] === 0xff && chunk.length < 10) {
+            setStatus(chunk[1].toString())
+            setRecordedBPM(chunk[2])
             return
           }
+
           fullAudioData.current = Buffer.concat([fullAudioData.current, chunk])
           localByteCount.current += chunk.length
           setProgress(Math.min(localByteCount.current / EXPECTED_SIZE, 1))
-          if (localByteCount.current >= EXPECTED_SIZE) finalizeAudio()
+
+          if (localByteCount.current >= EXPECTED_SIZE) {
+            finalizeAudio()
+          }
         },
       )
     } catch (e) {
       setStatus('Sync Error')
+      setIsTransferring(false)
     }
   }
 
@@ -409,7 +368,7 @@ export default function Index() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ActivityIndicator size='large' color='#3498db' />
-            <Text style={styles.modalTitle}>Device Active</Text>
+            <Text style={styles.modalTitle}>Processing Audio</Text>
             <Text style={styles.modalSubtitle}>{uiMessage}</Text>
             <View style={styles.modalProgressContainer}>
               <View
@@ -437,7 +396,7 @@ export default function Index() {
           {status === '1'
             ? 'Abnormal Detected'
             : status === '0'
-              ? 'Normal Reading'
+              ? 'Normal Detected'
               : status}
         </Text>
       </View>
@@ -445,11 +404,7 @@ export default function Index() {
       <ScrollView style={styles.dashboard}>
         <View style={styles.darkCard}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>
-              {uploadedFileName
-                ? `File: ${uploadedFileName}`
-                : 'Stethoscope Feed'}
-            </Text>
+            <Text style={styles.cardTitle}>Auscultation Analysis</Text>
             <Ionicons
               name='pulse'
               size={20}
@@ -463,7 +418,13 @@ export default function Index() {
                 <Text style={{ fontSize: 22, color: '#3498db' }}>bpm</Text>
               </Text>
               <SyncedECG bpm={recordedBPM || 72} active={isPlaying} />
-              <Phonocardiogram audioBuffer={cleanAudioBuffer.current} />
+              <Phonocardiogram
+                audioBuffer={
+                  isFilteredMode
+                    ? filteredAudioBuffer.current
+                    : rawAudioBuffer.current
+                }
+              />
               <View style={styles.toggleContainer}>
                 <TouchableOpacity
                   onPress={() => switchMode(false)}
@@ -514,34 +475,28 @@ export default function Index() {
                 minimumTrackTintColor='#3498db'
                 thumbTintColor='#3498db'
                 onSlidingComplete={async (v) => {
-                  if (soundRef.current) {
-                    const s = await soundRef.current.getStatusAsync()
-                    if (s.isLoaded) await soundRef.current.setPositionAsync(v)
-                  }
+                  if (soundRef.current)
+                    await soundRef.current.setPositionAsync(v)
                 }}
               />
               <TouchableOpacity
                 onPress={async () => {
                   if (!audioUri) return
-                  try {
-                    if (soundRef.current) {
-                      const s = await soundRef.current.getStatusAsync()
-                      if (s.isLoaded) {
-                        isPlaying
-                          ? await soundRef.current.pauseAsync()
-                          : await soundRef.current.playAsync()
-                        return
-                      }
+                  if (soundRef.current) {
+                    const s = await soundRef.current.getStatusAsync()
+                    if (s.isLoaded) {
+                      isPlaying
+                        ? await soundRef.current.pauseAsync()
+                        : await soundRef.current.playAsync()
+                      return
                     }
-                    const { sound } = await Audio.Sound.createAsync(
-                      { uri: audioUri },
-                      { shouldPlay: true },
-                      onPlaybackStatusUpdate,
-                    )
-                    soundRef.current = sound
-                  } catch (e) {
-                    console.warn(e)
                   }
+                  const { sound } = await Audio.Sound.createAsync(
+                    { uri: audioUri },
+                    { shouldPlay: true },
+                    onPlaybackStatusUpdate,
+                  )
+                  soundRef.current = sound
                 }}
                 style={styles.playBtn}
               >
@@ -556,84 +511,124 @@ export default function Index() {
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
               <Ionicons name='mic-circle' size={64} color='#222' />
               <Text style={styles.placeholder}>
-                Press hardware button or upload file...
+                Press physical button on stethoscope...
               </Text>
             </View>
           )}
         </View>
 
-        {mlResults ? (
-          <View style={styles.mlResultsCard}>
-            <Text style={styles.cardTitle}>Detailed Triage Analysis</Text>
-            <View style={{ marginTop: 15 }}>
-              {[
-                {
-                  label: 'Early Sys/Dia',
-                  value: mlResults[0],
-                  color: '#3498db',
-                },
-                {
-                  label: 'Holosystolic',
-                  value: mlResults[1],
-                  color: '#e67e22',
-                },
-                {
-                  label: 'Mid/Late Sys',
-                  value: mlResults[2],
-                  color: '#e74c3c',
-                },
-              ].map((item, idx) => (
-                <View key={idx} style={styles.probabilityRow}>
-                  <Text style={styles.probLabel}>{item.label}</Text>
-                  <View style={styles.probBarContainer}>
-                    <View
-                      style={[
-                        styles.probBar,
-                        {
-                          width: `${item.value * 100}%`,
-                          backgroundColor: item.color,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.probValue}>
-                    {(item.value * 100).toFixed(1)}%
-                  </Text>
+        {audioUri && !isTransferring && (
+          <View>
+            {status === '1' && mlResults ? (
+              <View style={styles.mlResultsCard}>
+                <Text style={styles.cardTitle}>Detailed Triage Results</Text>
+                <View style={{ marginTop: 15 }}>
+                  {[
+                    {
+                      label: 'Early Sys/Dia',
+                      value: mlResults[0],
+                      color: '#3498db',
+                    },
+                    {
+                      label: 'Holosystolic',
+                      value: mlResults[1],
+                      color: '#e67e22',
+                    },
+                    {
+                      label: 'Mid/Late Sys',
+                      value: mlResults[2],
+                      color: '#e74c3c',
+                    },
+                  ].map((item, idx) => (
+                    <View key={idx} style={styles.probabilityRow}>
+                      <Text style={styles.probLabel}>{item.label}</Text>
+                      <View style={styles.probBarContainer}>
+                        <View
+                          style={[
+                            styles.probBar,
+                            {
+                              width: `${item.value * 100}%`,
+                              backgroundColor: item.color,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.probValue}>
+                        {(item.value * 100).toFixed(1)}%
+                      </Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              </View>
+            ) : status === '0' ? (
+              <View style={styles.normalResultCard}>
+                <View style={styles.statusBadge}>
+                  <Ionicons name='checkmark-circle' size={24} color='#2ecc71' />
+                  <Text style={styles.normalTitle}>Healthy Heart</Text>
+                </View>
+                <Text style={styles.normalSub}>
+                  The automated triage did not detect significant murmur
+                  patterns.
+                </Text>
+              </View>
+            ) : null}
           </View>
-        ) : audioUri && (status === '0' || status === 'Normal Reading') ? (
-          <View style={styles.normalResultCard}>
-            <View style={styles.statusBadge}>
-              <Ionicons name='checkmark-circle' size={24} color='#2ecc71' />
-              <Text style={styles.normalTitle}>Heart Signal Healthy</Text>
-            </View>
-            <Text style={styles.normalSub}>
-              The automated hardware triage did not detect any significant
-              murmur patterns.
-            </Text>
-          </View>
-        ) : null}
+        )}
 
         <View style={styles.buttonRow}>
           <TouchableOpacity
             onPress={async () => {
-              if (!audioUri) return
-              try {
-                if (await Sharing.isAvailableAsync())
-                  await Sharing.shareAsync(audioUri)
-              } catch (e) {
-                Alert.alert('Error', 'Share failed')
-              }
+              if (audioUri && (await Sharing.isAvailableAsync()))
+                await Sharing.shareAsync(audioUri)
             }}
             style={[styles.primaryButton, { flex: 1, marginRight: 10 }]}
           >
-            <Text style={styles.primaryButtonText}>Share</Text>
+            <Text style={styles.primaryButtonText}>Export</Text>
             <Ionicons name='share-outline' size={20} color='white' />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={importRecording}
+            onPress={async () => {
+              try {
+                const result = await DocumentPicker.getDocumentAsync({
+                  type: 'audio/x-wav',
+                  copyToCacheDirectory: true,
+                })
+                if (result.canceled || !result.assets.length) return
+                setIsTransferring(true)
+                setUiMessage('Loading Upload...')
+                const fileAsset = result.assets[0]
+                const base64Data = await FileSystem.readAsStringAsync(
+                  fileAsset.uri,
+                  { encoding: FileSystem.EncodingType.Base64 },
+                )
+                const rawAudio = Buffer.from(base64Data, 'base64').slice(44)
+                const rawSamples = new Int16Array(
+                  rawAudio.buffer,
+                  rawAudio.byteOffset,
+                  rawAudio.byteLength / 2,
+                )
+                rawAudioUri.current = fileAsset.uri
+                rawAudioBuffer.current = Buffer.from(rawSamples.buffer)
+                const filteredSamples = applyHeartFilter(rawSamples)
+                const filteredBuffer = Buffer.from(filteredSamples.buffer)
+                const filteredPath = `${FileSystem.cacheDirectory}Filtered_Up_${Date.now()}.wav`
+                const header = createWavHeader(filteredBuffer.length, 4000)
+                await FileSystem.writeAsStringAsync(
+                  filteredPath,
+                  Buffer.concat([header, filteredBuffer]).toString('base64'),
+                  { encoding: 'base64' },
+                )
+                filteredAudioUri.current = filteredPath
+                filteredAudioBuffer.current = filteredBuffer
+                setAudioUri(filteredPath)
+                const results = await runInference(filteredSamples)
+                if (results) setMlResults(results)
+              } catch (error) {
+                Alert.alert('Upload Error', 'Failed to process file.')
+              } finally {
+                setIsTransferring(false)
+              }
+            }}
             style={[styles.secondaryButton, { flex: 1 }]}
           >
             <Text style={styles.secondaryButtonText}>Upload</Text>

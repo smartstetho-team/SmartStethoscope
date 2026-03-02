@@ -32,8 +32,12 @@ void ml_classification_task(void *dsp_ml_parameters)
     float* filtered_audio_buffer = params->filtered_audio_buffer;
     float* inference_buffer_a = params->inference_buffer_a;
     float* inference_buffer_b = params->inference_buffer_b;
+    float* inference_buffer_skip = params->inference_buffer_skip;
 
     EventGroupHandle_t event_group_handle = params->event_group_handle;
+
+    // ADDED: Extract characteristic for BLE communication
+    NimBLECharacteristic* pAudioDataChar = params->pAudioDataChar;
 
     while (1)
     {
@@ -171,7 +175,8 @@ void ml_classification_task(void *dsp_ml_parameters)
         // --- STEP 2: INFERENCE (40% -> 90%) ---
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
-                                       output, inference_buffer_a, inference_buffer_b);
+                                       output, inference_buffer_a, inference_buffer_b, 
+                                       inference_buffer_skip);
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 90, LV_ANIM_ON);
@@ -219,6 +224,24 @@ void ml_classification_task(void *dsp_ml_parameters)
             lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
+
+        // Set BPM & Abnormal/Normal (to be sent via BLE)
+        params->calculated_bpm = final_bpm;
+        params->classification_result = (output[1] > MURMUR_THRESHOLD) ? 1 : 0;
+
+        // ADDED: Formatting and sending metadata packet [Header, Status, BPM, Padding]
+        uint8_t metadata[4];
+        metadata[0] = 0xFF;                          // SYNC BYTE: Tells phone this is metadata
+        metadata[1] = params->classification_result; // 1 for Abnormal, 0 for Normal
+        metadata[2] = (uint8_t)params->calculated_bpm;
+        metadata[3] = 0x00;                          // Padding
+
+        ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, ">>> BLE TRIAGE SENT: Status=%d, BPM=%d", 
+                 metadata[1], metadata[2]);
+        
+        // Notify the phone characteristic immediately
+        pAudioDataChar->setValue(metadata, 4);
+        pAudioDataChar->notify();
 
         xEventGroupSetBits(event_group_handle, ML_CLASSIFICATION_END_BIT);
         xEventGroupClearBits(event_group_handle, ML_CLASSIFICATION_START_BIT);
