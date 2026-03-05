@@ -109,7 +109,7 @@ void configure_lcd_display(LCD_Display_Params * lcd_params)
 
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(lcd_params->panel_handle, 0, 0));
     ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(lcd_params->panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(lcd_params->panel_handle, false, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(lcd_params->panel_handle, true, false));
 
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(lcd_params->panel_handle, false));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(lcd_params->panel_handle, true)); // Display turned off by default
