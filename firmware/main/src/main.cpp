@@ -47,6 +47,19 @@ NimBLECharacteristic* pHeartChar = NULL;
 NimBLECharacteristic* pAudioDataChar = NULL; 
 NimBLECharacteristic* pBatteryChar = NULL;
 
+class MyCommandCallbacks : public NimBLECharacteristicCallbacks {
+    // Note the added NimBLEConnInfo parameter
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
+        std::string value = pCharacteristic->getValue();
+        
+        if (value == "RESET") {
+            ESP_LOGW("BLE", "Remote Reset Command Received! Rebooting...");
+            // Delay to allow BLE ACK to send before the CPU dies
+            vTaskDelay(pdMS_TO_TICKS(500)); 
+            esp_restart(); 
+        }
+    }
+};
 class MyServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
         ESP_LOGI(MAIN_TAG, "iPhone Connected!");
@@ -136,6 +149,14 @@ extern "C" void app_main(void)
 
     NimBLEService* pStethoService = pServer->createService(SERVICE_UUID_STETHO);
     pAudioDataChar = pStethoService->createCharacteristic(CHAR_UUID_AUDIO_DATA, NIMBLE_PROPERTY::NOTIFY);
+    // ESP32 reset callback via BLE 
+    NimBLECharacteristic* pCmdChar = pStethoService->createCharacteristic(
+                                    "00005678-0000-1000-8000-00805f9b34fb", 
+                                    NIMBLE_PROPERTY::WRITE | 
+                                    NIMBLE_PROPERTY::WRITE_NR // Adds "Write No Response" support
+                                 );
+    pCmdChar->setCallbacks(new MyCommandCallbacks());
+
     pStethoService->start();
 
     // Advertising
