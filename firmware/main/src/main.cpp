@@ -174,4 +174,7 @@ extern "C" void app_main(void)
     
     // Set up low power detection (let the lcd task handle this)
     configure_lbo_pin(lcd_ui_task_handle, (void*)&task_parameters);
+
+    // Set up low power detection (let the lcd task handle this)
+    configure_charging_pin(lcd_ui_task_handle, (void*)&task_parameters);
 }
