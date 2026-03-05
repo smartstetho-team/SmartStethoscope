@@ -127,41 +127,60 @@ void ml_classification_task(void *dsp_ml_parameters)
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
 
         // Calculate BPM metric
-        // 1. Dynamic Thresholding
         float max_peak = 0;
         for (int i = 0; i < NUM_OF_SAMPLES; i++) 
         {
-            if (abs(filtered_audio_buffer[i]) > max_peak) 
-            {
-                max_peak = abs(filtered_audio_buffer[i]);
+            float abs_val = abs(filtered_audio_buffer[i]);
+            if (abs_val > max_peak) 
+            { 
+                max_peak = abs_val;
             }
         }
 
-        // Set threshold at 65% of max to catch S1 but ignore background hiss
-        float threshold = max_peak * 0.65f; 
+        int final_bpm = 0;
         int beat_count = 0;
 
-        // 2. Refractory Period (Cooldown)
-        // A human heart won't beat faster than 220 BPM (~270ms per beat).
-        // We'll ignore everything for 300ms after a peak to skip the S2 "Dub".
-        int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
-        int last_beat_index = -refractory_samples; 
+        // If the room is silent, max_peak will be tiny. 
+        // Ignore everything below a 0.05 amplitude floor (adjust based on your mic).
+        const float NOISE_FLOOR = 0.05f; 
 
-        for (int i = 0; i < NUM_OF_SAMPLES; i++) 
+        if (max_peak < NOISE_FLOOR) 
         {
-            float current_val = abs(filtered_audio_buffer[i]);
+            ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "Silence detected (Peak: %.4f). Setting BPM to 0.", max_peak);
+            final_bpm = 0;
+        }
+        else 
+        {
+            // Dynamic Thresholding
+            float threshold = max_peak * 0.65f; 
+            
+            // Refractory Period (Cooldown)
+            // Ignore everything for 300ms after a peak to skip the S2 "Dub" and noise.
+            int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
+            int last_beat_index = -refractory_samples; 
 
-            // Trigger if: Signal > Threshold AND we are outside the cooldown window
-            if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
+            for (int i = 0; i < NUM_OF_SAMPLES; i++) 
             {
-                beat_count++;
-                last_beat_index = i; // Reset cooldown
+                float current_val = abs(filtered_audio_buffer[i]);
+
+                if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
+                {
+                    beat_count++;
+                    last_beat_index = i;
+                }
+            }
+
+            float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
+            final_bpm = (int)(beat_count * (60.0f / total_seconds));
+
+            // Sanity Check
+            // If the math results in 250+ BPM, it's likely electronic noise, not a heart.
+            if (final_bpm > 220 || final_bpm < 40) 
+            {
+                ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "BPM Out of Range (%d). Masking as 0.", final_bpm);
+                final_bpm = 0;
             }
         }
-
-        // 3. Final Conversion
-        float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
-        int final_bpm = (int)(beat_count * (60.0f / total_seconds));
 
         ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Calculated BPM: %d", final_bpm);
 
@@ -222,6 +241,11 @@ void ml_classification_task(void *dsp_ml_parameters)
             lv_obj_t *end_sub = lv_label_create(active_scr);
             lv_label_set_text_fmt(end_sub, "BPM: %d", final_bpm);
             lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
+
+            lv_obj_t *restart_label = lv_label_create(active_scr);
+            lv_label_set_text(restart_label, LV_SYMBOL_REFRESH " Press button to record again");
+            lv_obj_set_style_text_font(restart_label, &lv_font_montserrat_14, 0);
+            lv_obj_align(restart_label, LV_ALIGN_CENTER, 0, 75);
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
