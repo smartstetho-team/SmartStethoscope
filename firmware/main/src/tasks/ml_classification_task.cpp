@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_dsp.h"
 #include "lvgl.h"
+#include <cmath>
 
 static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 
@@ -95,7 +96,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_obj_t *bar = lv_bar_create(active_scr);
         lv_obj_set_size(bar, 200, 12);
         lv_obj_align(bar, LV_ALIGN_CENTER, 0, -20);
-        lv_bar_set_value(bar, 20, LV_ANIM_OFF);
+        lv_bar_set_value(bar, 5, LV_ANIM_OFF);
 
         // Pulsing Heart
         lv_obj_t *heart = lv_label_create(active_scr);
@@ -130,7 +131,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         float max_peak = 0;
         for (int i = 0; i < NUM_OF_SAMPLES; i++) 
         {
-            float abs_val = abs(filtered_audio_buffer[i]);
+            float abs_val = fabsf(filtered_audio_buffer[i]);
             if (abs_val > max_peak) 
             { 
                 max_peak = abs_val;
@@ -161,7 +162,7 @@ void ml_classification_task(void *dsp_ml_parameters)
 
             for (int i = 0; i < NUM_OF_SAMPLES; i++) 
             {
-                float current_val = abs(filtered_audio_buffer[i]);
+                float current_val = fabsf(filtered_audio_buffer[i]);
 
                 if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
                 {
@@ -186,8 +187,14 @@ void ml_classification_task(void *dsp_ml_parameters)
 
         vTaskDelay(pdMS_TO_TICKS(1000));
 
+        ui_update_handle_t ui_handle = {
+            .progress_bar = bar,
+            .status_label = proc_label,
+            .lvgl_lock = &params->lcd_params.lvgl_api_lock
+        };
+
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
-        lv_bar_set_value(bar, 40, LV_ANIM_ON);
+        lv_bar_set_value(bar, 20, LV_ANIM_ON);
         lv_label_set_text(proc_label, "Analyzing...");
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
@@ -195,7 +202,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
                                        output, inference_buffer_a, inference_buffer_b, 
-                                       inference_buffer_skip);
+                                       inference_buffer_skip, &ui_handle);
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 90, LV_ANIM_ON);
@@ -244,7 +251,7 @@ void ml_classification_task(void *dsp_ml_parameters)
 
             lv_obj_t *restart_label = lv_label_create(active_scr);
             lv_label_set_text(restart_label, LV_SYMBOL_REFRESH " Press button to record again");
-            lv_obj_set_style_text_font(restart_label, &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_font(restart_label, &lv_font_montserrat_16, 0);
             lv_obj_align(restart_label, LV_ALIGN_CENTER, 0, 75);
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
