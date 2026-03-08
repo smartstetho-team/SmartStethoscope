@@ -1,0 +1,22 @@
+I (804113) AUDIO_TASK: Record button pressed! Sampling now..
+I (812113) AUDIO_TASK: Sampling Time (ms): 8000
+I (812113) AUDIO_TASK: Finished sampling.
+I (812113) ML_CLASSIFICATION_TASK: Filtering audio..
+I (812123) ML_CLASSIFICATION_TASK: DC Offset: 1963.00
+I (812153) ML_CLASSIFICATION_TASK: Found 10 intervals. Avg Samples: 3071.6
+I (812153) ML_CLASSIFICATION_TASK: Calculated BPM: 78
+I (813153) AI: Starting inference: 32000 samples
+I (813923) AI: After initial_conv: len=8000
+I (830243) AI: After layer_7: len=1000
+I (846303) AI: After layer_15: len=250
+I (866283) AI: After layer_23: len=62
+I (878343) AI: After layer_31: len=7
+I (878993) AI: Before GAP: len=7
+I (879003) AI: Logits: 0.310421, -3.286522
+I (879003) AI: Probabilities: 0.973324, 0.026676
+I (879513) ML_CLASSIFICATION_TASK: >>> BLE TRIAGE SENT: Status=0, BPM=78
+I (879513) BLE_STREAMING_TASK: Bursting audio to iPhone...
+
+
+Apple Smartwatch:
+80 bpm

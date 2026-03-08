@@ -17,11 +17,13 @@ static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 static float state_s1[2] = {0}; 
 static float state_s2[2] = {0};
 
-// static float state_notch[2] = {0};
 // Original SciPy: a1 = -1.997864, a2 = 0.998429
 // ESP-DSP Stable: a1 = 1.997864, a2 = -0.998429
-// static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
+// Notch Filter
+static float state_notch[2] = {0};
+static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
 
+// Bandpass filter
 static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
 static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
 
@@ -113,8 +115,8 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_anim_init(&a);
         lv_anim_set_var(&a, heart_img);
         lv_anim_set_values(&a, 32, 48);      // 256 = 100% scale
-        lv_anim_set_time(&a, 350);             // Quick "Thump"
-        lv_anim_set_playback_time(&a, 650);    // Gentle return
+        lv_anim_set_time(&a, 200);             // Quick "Thump"
+        lv_anim_set_playback_time(&a, 600);    // Gentle return
         lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
         
         // Create a more organic, bouncy "thump"
@@ -126,7 +128,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_anim_start(&a);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 1: FILTERING (20% -> 40%) ---
+        // Filtering
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
 
@@ -142,7 +144,6 @@ void ml_classification_task(void *dsp_ml_parameters)
         }
 
         int final_bpm = 0;
-        int beat_count = 0;
 
         // If the room is silent, max_peak will be tiny. 
         // Ignore everything below a 0.05 amplitude floor (adjust based on your mic).
@@ -155,33 +156,53 @@ void ml_classification_task(void *dsp_ml_parameters)
         }
         else 
         {
-            // Dynamic Thresholding
-            float threshold = max_peak * 0.65f; 
-            
-            // Refractory Period (Cooldown)
-            // Ignore everything for 300ms after a peak to skip the S2 "Dub" and noise.
+            float threshold = max_peak * 0.60f; 
             int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
-            int last_beat_index = -refractory_samples; 
+            int last_beat_index = -1; 
+            
+            uint32_t total_interval_samples = 0;
+            int intervals_counted = 0;
 
             for (int i = 0; i < NUM_OF_SAMPLES; i++) 
             {
                 float current_val = fabsf(filtered_audio_buffer[i]);
 
-                if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
+                if (current_val > threshold) 
                 {
-                    beat_count++;
-                    last_beat_index = i;
+                    // If it's the first beat ever, just record the index
+                    if (last_beat_index == -1) 
+                    {
+                        last_beat_index = i;
+                    }
+                    // If it's a subsequent beat and outside the refractory window
+                    else if ((i - last_beat_index) > refractory_samples) 
+                    {
+                        total_interval_samples += (i - last_beat_index);
+                        intervals_counted++;
+                        last_beat_index = i; // Move marker to current beat
+                    }
                 }
             }
 
-            float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
-            final_bpm = (int)(beat_count * (60.0f / total_seconds));
+            if (intervals_counted > 0) 
+            {
+                // Average samples per beat
+                float avg_samples_per_beat = (float)total_interval_samples / intervals_counted;
+                
+                // BPM = (Frequency / Samples per beat) * 60 seconds
+                final_bpm = (int)((SAMPLE_FREQ_HZ / avg_samples_per_beat) * 60.0f);
+                ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Found %d intervals. Avg Samples: %.1f", 
+                         intervals_counted, avg_samples_per_beat);
+            }
+            else 
+            {
+                final_bpm = 0;
+            }
 
             // Sanity Check
-            // If the math results in 250+ BPM, it's likely electronic noise, not a heart.
             if (final_bpm > 220 || final_bpm < 40) 
             {
-                ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "BPM Out of Range (%d). Masking as 0.", final_bpm);
+                ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "BPM Out of Range (%d).", final_bpm);
                 final_bpm = 0;
             }
         }
@@ -202,7 +223,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_obj_set_style_text_color(proc_label, lv_color_white(), 0);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 2: INFERENCE (40% -> 90%) ---
+        // Run inference
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
                                        output, inference_buffer_a, inference_buffer_b, 
@@ -216,7 +237,7 @@ void ml_classification_task(void *dsp_ml_parameters)
 
         vTaskDelay(pdMS_TO_TICKS(500));
 
-        // --- STEP 3: RESULT & CLEANUP ---
+        // Output results
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_obj_clean(active_scr); // Automatically stops the heart animation
         
@@ -230,7 +251,7 @@ void ml_classification_task(void *dsp_ml_parameters)
             lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Abnormal");
             lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
-            lv_obj_set_style_text_color(end_label, lv_palette_main(LV_PALETTE_RED), 0);
+            lv_obj_set_style_text_color(end_label, lv_color_white(), 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
             lv_obj_t *end_sub1 = lv_label_create(active_scr);
@@ -252,7 +273,7 @@ void ml_classification_task(void *dsp_ml_parameters)
 
             lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Normal");
-            lv_obj_set_style_text_color(end_label, lv_palette_main(LV_PALETTE_GREEN), 0);
+            lv_obj_set_style_text_color(end_label, lv_color_white(), 0);
             lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
