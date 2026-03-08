@@ -47,6 +47,7 @@ NimBLECharacteristic* pHeartChar = NULL;
 NimBLECharacteristic* pAudioDataChar = NULL; 
 NimBLECharacteristic* pBatteryChar = NULL;
 
+// BLE Callbacks
 class MyCommandCallbacks : public NimBLECharacteristicCallbacks {
     // Note the added NimBLEConnInfo parameter
     void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
@@ -196,6 +197,6 @@ extern "C" void app_main(void)
     // Set up low power detection (let the lcd task handle this)
     configure_lbo_pin(lcd_ui_task_handle, (void*)&task_parameters);
 
-    // Set up low power detection (let the lcd task handle this)
+    // Set up dock charging (let the lcd task handle this)
     configure_charging_pin(lcd_ui_task_handle, (void*)&task_parameters);
 }
