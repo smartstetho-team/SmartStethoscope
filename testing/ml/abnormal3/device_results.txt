@@ -1,0 +1,7 @@
+[AI] Logits: -3.028471, 1.376829
+[AI] Probabilities: 0.012065, 0.987935
+
+=== Results ===
+P(Normal):  0.0121
+P(Murmur):  0.9879
+Verdict:    ABNORMAL

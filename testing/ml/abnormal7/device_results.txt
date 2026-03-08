@@ -1,0 +1,6 @@
+[AI] Probabilities: 0.000000, 1.000000
+
+=== Results ===
+P(Normal):  0.0000
+P(Murmur):  1.0000
+Verdict:    ABNORMAL
