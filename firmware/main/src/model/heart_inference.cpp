@@ -9,6 +9,7 @@
  *   buf_skip - stores input for residual addition
  */
 
+#include "dsp_ml_setup.h"
 #include "heart_inference.h"
 #include "model_weights.h"
 
@@ -21,6 +22,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "lvgl.h"
 #define YIELD() vTaskDelay(1)
 #define LOG_INFO(tag, fmt, ...) ESP_LOGI(tag, fmt, ##__VA_ARGS__)
 #else
@@ -181,7 +183,7 @@ void copy_buffer(const float* src, float* dst, int count) {
 int run_inference(
     const float* input, int input_length,
     float* output,
-    float* buffer_a, float* buffer_b, float* buffer_skip
+    float* buffer_a, float* buffer_b, float* buffer_skip, ui_update_handle_t *ui
 ) {
     if (!buffer_a || !buffer_b || !buffer_skip) return -1;
     if (input_length > 80000) return -1;
@@ -218,6 +220,10 @@ int run_inference(
         std::swap(buf_in, buf_out);
     }
     LOG_INFO("AI", "After initial_conv: len=%d", cur_len);
+
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 30, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
 
     // Layer 1: layer_0 (16->32) [residual] [proj] [pool=2]
     {
@@ -472,6 +478,10 @@ int run_inference(
     }
     LOG_INFO("AI", "After layer_7: len=%d", cur_len);
 
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 40, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
+
     // Layer 9: layer_8 (64->64) [residual]
     {
         const int skip_channels = 64;
@@ -714,6 +724,10 @@ int run_inference(
     }
     LOG_INFO("AI", "After layer_15: len=%d", cur_len);
 
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 50, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
+
     // Layer 17: layer_16 (128->128) [residual]
     {
         const int skip_channels = 128;
@@ -955,6 +969,10 @@ int run_inference(
         std::swap(buf_in, buf_out);
     }
     LOG_INFO("AI", "After layer_23: len=%d", cur_len);
+
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 60, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
 
     // Layer 25: layer_24 (256->256) [residual] [pool=2]
     {
@@ -1199,6 +1217,10 @@ int run_inference(
     }
     LOG_INFO("AI", "After layer_31: len=%d", cur_len);
 
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 70, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
+
     // Layer 33: layer_32 (256->256) [residual]
     {
         const int skip_channels = 256;
@@ -1229,6 +1251,10 @@ int run_inference(
 
 
     LOG_INFO("AI", "Before GAP: len=%d", cur_len);
+
+    _lock_acquire(ui->lvgl_lock);
+    lv_bar_set_value(ui->progress_bar, 80, LV_ANIM_ON);
+    _lock_release(ui->lvgl_lock);
 
     // Global Average Pooling
     std::array<float, 256> pooled{};

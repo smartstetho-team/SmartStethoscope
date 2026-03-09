@@ -15,16 +15,47 @@ static const char *LCD_UI_TASK_TAG = "LCD_UI_TASK";
 void bootup_screen_init(void * lcd_params)
 {
     LCD_Display_Params* params = (LCD_Display_Params*)lcd_params;
-
-    // Turn the LCD display ON
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(params->panel_handle, true));
-
-    // Create components in the initial bootup screen
+    
     _lock_acquire(&params->lvgl_api_lock);
+    lv_obj_t * active_scr = lv_screen_active();
+    lv_obj_clean(active_scr);
 
-    lv_obj_t *label = lv_label_create(lv_screen_active());
-    lv_label_set_text(label, "Press button to start..");
-    lv_obj_center(label);
+    lv_obj_set_style_bg_color(active_scr, lv_color_hex(0x121212), 0);
+    lv_obj_set_scrollbar_mode(active_scr, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(active_scr, LV_OBJ_FLAG_SCROLLABLE);
+
+    // CardioScope Brand
+    lv_obj_t *welcome = lv_label_create(active_scr);
+    lv_label_set_text(welcome, "CardioScope"); 
+    lv_obj_set_style_text_color(welcome, lv_color_white(), 0);
+    lv_label_set_recolor(welcome, true);
+    lv_obj_set_style_text_font(welcome, &lv_font_montserrat_30, 0); 
+    lv_obj_set_style_text_align(welcome, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(welcome, LV_ALIGN_CENTER, 0, -85);
+
+    // Logo
+    lv_obj_t * logo_img = lv_img_create(active_scr);
+    lv_img_set_src(logo_img, &logo);
+    lv_img_set_zoom(logo_img, 64);
+    lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, 10);
+
+    lv_obj_t *ready = lv_label_create(active_scr);
+    lv_label_set_text(ready, "Press button to start..");
+    lv_obj_set_style_text_font(ready, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(ready, lv_color_white(), 0);
+    lv_obj_align(ready, LV_ALIGN_BOTTOM_MID, 0, -25);
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, ready);
+    lv_anim_set_values(&a, 255, 80);
+    lv_anim_set_time(&a, 1200);
+    lv_anim_set_playback_time(&a, 800);
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
+        lv_obj_set_style_text_opa((lv_obj_t *)var, v, 0);
+    });
+    lv_anim_start(&a);
 
     _lock_release(&params->lvgl_api_lock);
 }
@@ -60,14 +91,18 @@ void lcd_ui_task(void *lcd_ui_parameters)
                 lv_obj_t *err_icon = lv_label_create(active_scr);
                 lv_label_set_text(err_icon, LV_SYMBOL_BATTERY_1);
                 lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
+                lv_obj_set_style_text_color(err_icon, lv_palette_main(LV_PALETTE_AMBER), 0);
 
                 lv_obj_t *end_label = lv_label_create(active_scr);
                 lv_label_set_text(end_label, "Battery low");
+                lv_obj_set_style_text_color(end_label, lv_color_white(), 0);
+                
                 lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
                 lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
                 lv_obj_t *end_sub1 = lv_label_create(active_scr);
                 lv_label_set_text(end_sub1, "Going to sleep..");
+                lv_obj_set_style_text_color(end_sub1, lv_color_white(), 0);
                 lv_obj_align(end_sub1, LV_ALIGN_CENTER, 0, 45);
 
                 _lock_release(&lcd_params.lvgl_api_lock);
@@ -94,6 +129,7 @@ void lcd_ui_task(void *lcd_ui_parameters)
                         chg_label = lv_label_create(lv_screen_active());
                         lv_label_set_text(chg_label, LV_SYMBOL_CHARGE " Docked");
                         lv_obj_align(chg_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+                        lv_obj_set_style_text_color(chg_label, lv_palette_main(LV_PALETTE_LIGHT_BLUE), 0);
                         ESP_LOGI(LCD_UI_TASK_TAG, "UI: Charging Icon Added");
                     }
                 }

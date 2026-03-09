@@ -1,0 +1,8 @@
+[AI] Before GAP: len=19
+[AI] Logits: 1.053913, -1.894638
+[AI] Probabilities: 0.950195, 0.049805
+
+=== Results ===
+P(Normal):  0.9502
+P(Murmur):  0.0498
+Verdict:    NORMAL

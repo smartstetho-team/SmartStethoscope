@@ -1,0 +1,6 @@
+[AI] Probabilities: 0.077212, 0.922788
+
+=== Results ===
+P(Normal):  0.0772
+P(Murmur):  0.9228
+Verdict:    ABNORMAL

@@ -1,5 +1,6 @@
 #include "dsp_ml_setup.h"
 #include "mic_setup.h"
+#include "lcd_ui_setup.h"
 #include "heart_inference.h"
 
 #include "cmn.h"
@@ -8,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_dsp.h"
 #include "lvgl.h"
+#include <cmath>
 
 static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 
@@ -15,11 +17,13 @@ static const char *ML_CLASSIFICATION_TASK_TAG = "ML_CLASSIFICATION_TASK";
 static float state_s1[2] = {0}; 
 static float state_s2[2] = {0};
 
-// static float state_notch[2] = {0};
 // Original SciPy: a1 = -1.997864, a2 = 0.998429
 // ESP-DSP Stable: a1 = 1.997864, a2 = -0.998429
-// static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
+// Notch Filter
+static float state_notch[2] = {0};
+static float coeffs_notch[5] = {0.999215f, -1.997864f, 0.999215f, -1.997864f, 0.998429f};
 
+// Bandpass filter
 static float coeffs_s1[5] = {0.002081f, 0.004161f, 0.002081f, -1.889040f, 0.899332f};
 static float coeffs_s2[5] = {1.000000f, -2.000000f, 1.000000f, -1.972482f, 0.973183f};
 
@@ -88,6 +92,7 @@ void ml_classification_task(void *dsp_ml_parameters)
         // Status Label
         lv_obj_t *proc_label = lv_label_create(active_scr);
         lv_label_set_text(proc_label, "Filtering Audio...");
+        lv_obj_set_style_text_color(proc_label, lv_color_white(), 0);
         lv_obj_set_style_text_font(proc_label, &lv_font_montserrat_22, 0); 
         lv_obj_align(proc_label, LV_ALIGN_CENTER, 0, -60);
 
@@ -95,97 +100,144 @@ void ml_classification_task(void *dsp_ml_parameters)
         lv_obj_t *bar = lv_bar_create(active_scr);
         lv_obj_set_size(bar, 200, 12);
         lv_obj_align(bar, LV_ALIGN_CENTER, 0, -20);
-        lv_bar_set_value(bar, 20, LV_ANIM_OFF);
+        lv_bar_set_value(bar, 5, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(bar, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_INDICATOR);
 
         // Pulsing Heart
-        lv_obj_t *heart = lv_label_create(active_scr);
-        lv_label_set_text(heart, LV_SYMBOL_VOLUME_MID);
-        lv_obj_set_style_text_color(heart, lv_palette_main(LV_PALETTE_RED), 0);
-        lv_obj_set_style_text_font(heart, &lv_font_montserrat_30, 0); // Large and visible
-        lv_obj_align(heart, LV_ALIGN_CENTER, 0, 50);
+        lv_obj_t *heart_img = lv_img_create(active_scr);
+        lv_img_set_src(heart_img, &heart);  // Pointer to the variable declared in your header
+        lv_img_set_zoom(heart_img, 32);
+        lv_obj_align(heart_img, LV_ALIGN_CENTER, 0, 50);
 
         // "Lub-Dub" Heartbeat Animation
         lv_anim_t a;
         lv_anim_init(&a);
-        lv_anim_set_var(&a, heart);
-        lv_anim_set_values(&a, 256, 380);      // 256 = 100% scale
+        lv_anim_set_var(&a, heart_img);
+        lv_anim_set_values(&a, 32, 48);      // 256 = 100% scale
         lv_anim_set_time(&a, 200);             // Quick "Thump"
-        lv_anim_set_playback_time(&a, 400);    // Gentle return
+        lv_anim_set_playback_time(&a, 600);    // Gentle return
         lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
         
         // Create a more organic, bouncy "thump"
         lv_anim_set_path_cb(&a, lv_anim_path_overshoot); 
         
         lv_anim_set_exec_cb(&a, [](void * var, int32_t v) {
-            lv_obj_set_style_transform_scale((lv_obj_t *)var, v, 0);
+            lv_img_set_zoom((lv_obj_t *)var, v);
         });
         lv_anim_start(&a);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 1: FILTERING (20% -> 40%) ---
+        // Filtering
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s1, state_s1);
         dsps_biquad_f32(filtered_audio_buffer, filtered_audio_buffer, NUM_OF_SAMPLES, coeffs_s2, state_s2);
 
         // Calculate BPM metric
-        // 1. Dynamic Thresholding
         float max_peak = 0;
         for (int i = 0; i < NUM_OF_SAMPLES; i++) 
         {
-            if (abs(filtered_audio_buffer[i]) > max_peak) 
-            {
-                max_peak = abs(filtered_audio_buffer[i]);
+            float abs_val = fabsf(filtered_audio_buffer[i]);
+            if (abs_val > max_peak) 
+            { 
+                max_peak = abs_val;
             }
         }
 
-        // Set threshold at 65% of max to catch S1 but ignore background hiss
-        float threshold = max_peak * 0.65f; 
-        int beat_count = 0;
+        int final_bpm = 0;
 
-        // 2. Refractory Period (Cooldown)
-        // A human heart won't beat faster than 220 BPM (~270ms per beat).
-        // We'll ignore everything for 300ms after a peak to skip the S2 "Dub".
-        int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
-        int last_beat_index = -refractory_samples; 
+        // If the room is silent, max_peak will be tiny. 
+        // Ignore everything below a 0.05 amplitude floor (adjust based on your mic).
+        const float NOISE_FLOOR = 0.05f; 
 
-        for (int i = 0; i < NUM_OF_SAMPLES; i++) 
+        if (max_peak < NOISE_FLOOR) 
         {
-            float current_val = abs(filtered_audio_buffer[i]);
+            ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "Silence detected (Peak: %.4f). Setting BPM to 0.", max_peak);
+            final_bpm = 0;
+        }
+        else 
+        {
+            float threshold = max_peak * 0.60f; 
+            int refractory_samples = (int)(SAMPLE_FREQ_HZ * 0.30); 
+            int last_beat_index = -1; 
+            
+            uint32_t total_interval_samples = 0;
+            int intervals_counted = 0;
 
-            // Trigger if: Signal > Threshold AND we are outside the cooldown window
-            if (current_val > threshold && (i - last_beat_index) > refractory_samples) 
+            for (int i = 0; i < NUM_OF_SAMPLES; i++) 
             {
-                beat_count++;
-                last_beat_index = i; // Reset cooldown
+                float current_val = fabsf(filtered_audio_buffer[i]);
+
+                if (current_val > threshold) 
+                {
+                    // If it's the first beat ever, just record the index
+                    if (last_beat_index == -1) 
+                    {
+                        last_beat_index = i;
+                    }
+                    // If it's a subsequent beat and outside the refractory window
+                    else if ((i - last_beat_index) > refractory_samples) 
+                    {
+                        total_interval_samples += (i - last_beat_index);
+                        intervals_counted++;
+                        last_beat_index = i; // Move marker to current beat
+                    }
+                }
+            }
+
+            if (intervals_counted > 0) 
+            {
+                // Average samples per beat
+                float avg_samples_per_beat = (float)total_interval_samples / intervals_counted;
+                
+                // BPM = (Frequency / Samples per beat) * 60 seconds
+                final_bpm = (int)((SAMPLE_FREQ_HZ / avg_samples_per_beat) * 60.0f);
+                ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Found %d intervals. Avg Samples: %.1f", 
+                         intervals_counted, avg_samples_per_beat);
+            }
+            else 
+            {
+                final_bpm = 0;
+            }
+
+            // Sanity Check
+            if (final_bpm > 220 || final_bpm < 40) 
+            {
+                ESP_LOGW(ML_CLASSIFICATION_TASK_TAG, "BPM Out of Range (%d).", final_bpm);
+                final_bpm = 0;
             }
         }
-
-        // 3. Final Conversion
-        float total_seconds = (float)NUM_OF_SAMPLES / SAMPLE_FREQ_HZ;
-        int final_bpm = (int)(beat_count * (60.0f / total_seconds));
 
         ESP_LOGI(ML_CLASSIFICATION_TASK_TAG, "Calculated BPM: %d", final_bpm);
 
         vTaskDelay(pdMS_TO_TICKS(1000));
 
+        ui_update_handle_t ui_handle = {
+            .progress_bar = bar,
+            .status_label = proc_label,
+            .lvgl_lock = &params->lcd_params.lvgl_api_lock
+        };
+
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
-        lv_bar_set_value(bar, 40, LV_ANIM_ON);
+        lv_bar_set_value(bar, 20, LV_ANIM_ON);
         lv_label_set_text(proc_label, "Analyzing...");
+        lv_obj_set_style_text_color(proc_label, lv_color_white(), 0);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
-        // --- STEP 2: INFERENCE (40% -> 90%) ---
+        // Run inference
         float output[2];
         heart_inference::run_inference(filtered_audio_buffer, NUM_OF_SAMPLES, 
                                        output, inference_buffer_a, inference_buffer_b, 
-                                       inference_buffer_skip);
+                                       inference_buffer_skip, &ui_handle);
 
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_bar_set_value(bar, 90, LV_ANIM_ON);
         lv_label_set_text(proc_label, "Finalizing...");
+        lv_obj_set_style_text_color(proc_label, lv_color_white(), 0);
         _lock_release(&params->lcd_params.lvgl_api_lock);
 
         vTaskDelay(pdMS_TO_TICKS(500));
 
-        // --- STEP 3: RESULT & CLEANUP ---
+        // Output results
         _lock_acquire(&params->lcd_params.lvgl_api_lock);
         lv_obj_clean(active_scr); // Automatically stops the heart animation
         
@@ -194,34 +246,47 @@ void ml_classification_task(void *dsp_ml_parameters)
             lv_obj_t *err_icon = lv_label_create(active_scr);
             lv_label_set_text(err_icon, LV_SYMBOL_WARNING);
             lv_obj_align(err_icon, LV_ALIGN_CENTER, 0, -50);
+            lv_obj_set_style_text_color(err_icon, lv_palette_main(LV_PALETTE_RED), 0);
 
             lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Abnormal");
             lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
+            lv_obj_set_style_text_color(end_label, lv_color_white(), 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
             lv_obj_t *end_sub1 = lv_label_create(active_scr);
             lv_label_set_text(end_sub1, "BPM: --");
             lv_obj_align(end_sub1, LV_ALIGN_CENTER, 0, 45);
+            lv_obj_set_style_text_color(end_sub1, lv_color_white(), 0);
             
             lv_obj_t *end_sub2 = lv_label_create(active_scr);
             lv_label_set_text(end_sub2, "Check CardioScope App");
+            lv_obj_set_style_text_color(end_sub2, lv_color_white(), 0);
             lv_obj_align(end_sub2, LV_ALIGN_CENTER, 0, 75);
         } 
         else 
         {
             lv_obj_t *ok_icon = lv_label_create(active_scr);
             lv_label_set_text(ok_icon, LV_SYMBOL_OK);
+            lv_obj_set_style_text_color(ok_icon, lv_palette_main(LV_PALETTE_GREEN), 0);
             lv_obj_align(ok_icon, LV_ALIGN_CENTER, 0, -50);
 
             lv_obj_t *end_label = lv_label_create(active_scr);
             lv_label_set_text(end_label, "Normal");
+            lv_obj_set_style_text_color(end_label, lv_color_white(), 0);
             lv_obj_set_style_text_font(end_label, &lv_font_montserrat_30, 0);
             lv_obj_align(end_label, LV_ALIGN_CENTER, 0, 0);
 
             lv_obj_t *end_sub = lv_label_create(active_scr);
             lv_label_set_text_fmt(end_sub, "BPM: %d", final_bpm);
+            lv_obj_set_style_text_color(end_sub, lv_color_white(), 0);
             lv_obj_align(end_sub, LV_ALIGN_CENTER, 0, 45);
+
+            lv_obj_t *restart_label = lv_label_create(active_scr);
+            lv_label_set_text(restart_label, LV_SYMBOL_REFRESH " Press button to record again");
+            lv_obj_set_style_text_color(restart_label, lv_color_white(), 0);
+            lv_obj_set_style_text_font(restart_label, &lv_font_montserrat_16, 0);
+            lv_obj_align(restart_label, LV_ALIGN_CENTER, 0, 75);
         }
         _lock_release(&params->lcd_params.lvgl_api_lock);
 

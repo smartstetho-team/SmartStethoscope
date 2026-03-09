@@ -84,10 +84,17 @@ void audio_sampling_task(void *audio_parameters)
         lv_obj_set_size(record_spinner, 100, 100);
         lv_obj_center(record_spinner);
         lv_spinner_set_anim_params(record_spinner, 10000, 200);
+        lv_obj_set_style_arc_color(record_spinner, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_opa(record_spinner, LV_OPA_COVER, LV_PART_INDICATOR);
+
+        lv_obj_set_style_arc_color(record_spinner, lv_color_hex(0x333333), LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(record_spinner, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(record_spinner, 10, LV_PART_MAIN);
 
         lv_obj_t *start_label = lv_label_create(lv_screen_active());
         lv_label_set_text(start_label, "Recording..");
-        lv_obj_set_style_text_font(start_label, &lv_font_montserrat_18, 0);
+        lv_obj_set_style_text_color(start_label, lv_color_white(), 0);
+        lv_obj_set_style_text_font(start_label, &lv_font_montserrat_20, 0);
         lv_obj_align(start_label, LV_ALIGN_CENTER, 0, 70);
         
         _lock_release(&params->lcd_params.lvgl_api_lock);

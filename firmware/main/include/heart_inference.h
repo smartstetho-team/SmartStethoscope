@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "dsp_ml_setup.h"
 #include <cstdint>
 
 namespace heart_inference {
@@ -20,6 +21,7 @@ namespace heart_inference {
  * @param buffer_a      Working buffer (at least 256 * max_temporal_length floats)
  * @param buffer_b      Working buffer (same size as buffer_a)
  * @param buffer_skip   Skip connection buffer (same size as buffer_a)
+ * @param ui            LCD UI Handle (for UI updates)
  * @return 0 on success, -1 on error
  *
  * Buffer sizing guide:
@@ -47,7 +49,7 @@ namespace heart_inference {
 int run_inference(
     const float* input, int input_length,
     float* output,
-    float* buffer_a, float* buffer_b, float* buffer_skip
+    float* buffer_a, float* buffer_b, float* buffer_skip, ui_update_handle_t *ui
 );
 
 } // namespace heart_inference
