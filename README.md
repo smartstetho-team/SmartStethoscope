@@ -48,7 +48,3 @@ We are final-year Mechatronics Engineering students at the University of Waterlo
 * **Rijin Muralidharan**
 
 ---
-
-<div align="center">
-  <sub>Built with ❤️ by Team CardioScope - Tron 2026</sub>
-</div>
