@@ -36,8 +36,6 @@ Our system enables users to record and screen heart sounds remotely, utilizing a
 
   ### 📺 Project Walkthrough
   [![CardioScope Demo Video](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=UnKrV0Ibpyw)
-
-  *Click the badge above to watch the CardioScope in action, featuring live heart sound acquisition and analysis.*
 </div>
 
 ## 👥 The Team
