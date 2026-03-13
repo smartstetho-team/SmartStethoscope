@@ -1,26 +1,29 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CardioScope | AI Stethoscope</title>
+    <title>CardioScope | Edge AI Stethoscope</title>
     <link rel="stylesheet" href="style.css" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
     <nav>
-      <div class="container">
-        <div class="logo">CARDIO<b>SCOPE</b></div>
+      <div class="container nav-flex">
+        <div class="logo-box">
+          <img src="logo.png" alt="CardioScope Logo" class="nav-logo-img" />
+        </div>
         <ul>
           <li><a href="#about">About</a></li>
+          <li><a href="#demo">Demo</a></li>
           <li><a href="#tech">Technology</a></li>
           <li><a href="#team">Team</a></li>
           <li>
             <a
-              href="https://github.com/smartstetho-team/SmartStethoscope"
+              href="https://github.com/cardioscope-team/SmartStethoscope"
               target="_blank"
               >GitHub</a
             >
@@ -28,7 +31,7 @@
           <li>
             <a
               href="https://www.notion.so/Design-Log-2686d23b914c800d914ee212999964b0"
-              class="btn-nav"
+              class="btn-nav-accent"
               target="_blank"
               >Design Log →</a
             >
@@ -37,35 +40,64 @@
       </div>
     </nav>
 
-    <header id="about">
+    <header id="about" class="hero-section">
       <div class="container">
-        <span class="tag">UW Engineering Capstone 2026</span>
         <h1>
           Smart Cardiac Monitoring. <br /><span class="highlight"
             >Powered by Edge AI.</span
           >
         </h1>
-        <p>
-          CardioScope is an automated stethoscope system that leverages deep
-          learning to detect heart murmurs and respiratory issues in real-time.
+        <p class="hero-subtitle">
+          CardioScope is an automated stethoscope system that leverages custom
+          <b>machine learning models</b> to detect heart murmurs locally
+          on-device.
         </p>
         <div class="hero-btns">
-          <a href="#tech" class="btn-primary">View Specs</a>
+          <a href="#demo" class="btn-primary">Watch Demo</a>
           <a
-            href="https://github.com/smartstetho-team/SmartStethoscope"
+            href="https://github.com/cardioscope-team/SmartStethoscope"
             target="_blank"
             class="btn-secondary"
             >Source Code</a
           >
         </div>
-        <div class="hero-image">
+        <div class="hero-image-container">
           <img
-            src="cardioScope.png"
-            alt="CardioScope AI Device and Mobile Interface"
+            src="cardioScope.jpg"
+            alt="CardioScope Prototype Hardware"
+            class="hero-main-img"
           />
         </div>
       </div>
     </header>
+
+    <section id="demo" class="demo-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Product in Action</h2>
+          <p>Real-time auscultation analysis and mobile synchronization.</p>
+        </div>
+        <div class="video-container">
+          <iframe
+            width="100%"
+            height="500"
+            src="https://www.youtube.com/embed/MzjUhHS8d_o?autoplay=0&rel=0&showinfo=0"
+            title="CardioScope Demo"
+            frameborder="0"
+            allow="
+              accelerometer;
+              autoplay;
+              clipboard-write;
+              encrypted-media;
+              gyroscope;
+              picture-in-picture;
+            "
+            allowfullscreen
+          >
+          </iframe>
+        </div>
+      </div>
+    </section>
 
     <section id="tech" class="tech-grid">
       <div class="container">
@@ -76,13 +108,12 @@
             cloud-level neural accuracy.
           </p>
         </div>
-
         <div class="grid-3">
           <div class="tech-card">
             <div class="icon">🧠</div>
             <h3>ResNet-24 Model</h3>
             <p>
-              88% Specificity achieved via a 24-layer residual network trained
+              85.5% Specificity achieved via a 24-layer residual network trained
               on clinical heart sound datasets.
             </p>
           </div>
@@ -110,42 +141,16 @@
       <div class="container">
         <div class="stats-box">
           <div class="stat">
-            <h4>76%</h4>
-            <p>Sensitivity</p>
+            <h4 class="stat-number">88.5%</h4>
+            <p class="stat-label">Sensitivity</p>
           </div>
           <div class="stat">
-            <h4>88%</h4>
-            <p>Specificity</p>
+            <h4 class="stat-number">85.5%</h4>
+            <p class="stat-label">Specificity</p>
           </div>
           <div class="stat">
-            <h4>&lt;100ms</h4>
-            <p>Inference Latency</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="notion-cta">
-      <div class="container">
-        <div class="cta-card">
-          <h2>Follow Our Development</h2>
-          <p>
-            From initial brainstorming and patent research to PCB layout and
-            FreeRTOS implementation.
-          </p>
-          <div class="cta-btns">
-            <a
-              href="https://www.notion.so/Design-Log-2686d23b914c800d914ee212999964b0"
-              target="_blank"
-              class="btn-primary"
-              >Open Notion Design Log</a
-            >
-            <a
-              href="https://github.com/smartstetho-team/SmartStethoscope"
-              target="_blank"
-              class="btn-github"
-              >View on GitHub</a
-            >
+            <h4 class="stat-number">86%</h4>
+            <p class="stat-label">Accuracy</p>
           </div>
         </div>
       </div>
@@ -153,17 +158,21 @@
 
     <section id="team" class="team-section">
       <div class="container">
-        <h2>The Team</h2>
-        <div class="grid-4">
-          <div class="member"><strong>Om Patel</strong><br />Mechanical</div>
-          <div class="member">
-            <strong>Rijin Muralidharan</strong><br />Electrical/Firmware
-          </div>
-          <div class="member">
-            <strong>Roby Aldave-Garza</strong><br />ML Software
-          </div>
-          <div class="member">
-            <strong>Krish Vijayan</strong><br />Mobile/Systems
+        <div class="section-header">
+          <h2>The Team</h2>
+          <p>Engineering the future of cardiovascular diagnostics.</p>
+        </div>
+        <div class="team-photo-container">
+          <img
+            src="team_photo.jpg"
+            alt="CardioScope Team"
+            class="main-team-photo"
+          />
+          <div class="team-names-caption">
+            <span class="member-name">Roby Aldave-Garza</span>,
+            <span class="member-name">Rijin Muralidharan</span>,
+            <span class="member-name">Om Patel</span>,
+            <span class="member-name">Krish Vijayan</span>
           </div>
         </div>
       </div>
@@ -171,7 +180,7 @@
 
     <footer>
       <div class="container">
-        <p>&copy; 2026 CardioScope Team. Built for University of Waterloo.</p>
+        <p>&copy; 2026 CardioScope Team.</p>
       </div>
     </footer>
   </body>
