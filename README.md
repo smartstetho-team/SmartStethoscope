@@ -5,7 +5,7 @@
   **University of Waterloo | Mechatronics Engineering Capstone 2026**
 
   [![Website](https://img.shields.io/badge/Website-CardioScope-blue)](https://smartstetho-team.github.io/SmartStethoscope/)
-  [![Status](https://img.shields.io/badge/Status-In--Development-green)](#)
+  [![Status](https://img.shields.io/badge/Status-Complete-brightgreen)](#)
 
   *An intelligent digital stethoscope designed for real-time heart sound analysis*
 </div>
@@ -37,6 +37,14 @@ Our system enables users to record and screen heart sounds remotely, utilizing a
   ### 📺 Project Walkthrough
   [![CardioScope Demo Video](https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=UnKrV0Ibpyw)
 </div>
+
+## ⏭️ Next Steps
+
+Future work will focus on improving the experience during device operation:
+
+* **Multimodal Recording Feedback:** Add haptic or auditory cues (vibration or a beep) to signal when a recording starts and stops, so users aren't solely dependent on the LCD notifications.
+
+* **Live Placement Guidance:** Add a real-time arrow system on the LCD that uses signal strength to guide the user into the optimal chest position. Once a strong signal is detected, the device simply notifies the user that they've found the right spot.
 
 ## 👥 The Team
 We are final-year Mechatronics Engineering students at the University of Waterloo:
